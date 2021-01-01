@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">OPIcDI</string>
+
+    <!-- ScrollingViewBehavior -->
+    <string name="appbar_scrolling_view_behavior" translatable="false">
+        com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior
+    </string>
+
+    <!-- Script Writing -->
+    <string name="script_writing">스크립트 작성</string>
 </resources>

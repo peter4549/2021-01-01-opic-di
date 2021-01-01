@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/titleContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:boxStrokeWidth="0dp"
+            app:boxStrokeWidthFocused="0dp"
+            app:counterEnabled="true"
+            app:counterMaxLength="20"
+            app:hintEnabled="false"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:importantForAutofill="no"
+                android:maxLines="1"
+                android:paddingBottom="@dimen/spacing_small"
+                android:paddingEnd="@dimen/spacing_medium"
+                android:paddingStart="@dimen/spacing_medium"
+                android:paddingTop="@dimen/spacing_small" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/scriptContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:boxStrokeWidth="0dp"
+            app:boxStrokeWidthFocused="0dp"
+            app:counterEnabled="true"
+            app:counterMaxLength="1000"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/titleContainer">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/script"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top"
+                android:inputType="textMultiLine"
+                android:importantForAutofill="no"
+                android:minHeight="112dp"
+                android:paddingBottom="@dimen/spacing_small"
+                android:paddingEnd="@dimen/spacing_medium"
+                android:paddingStart="@dimen/spacing_medium"
+                android:paddingTop="@dimen/spacing_small"
+                android:scrollbars="vertical"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:id="@+id/toolContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <ImageView
+                android:id="@+id/undo"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginBottom="@dimen/spacing_medium"
+                android:layout_marginEnd="@dimen/spacing_small"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:layout_marginTop="@dimen/spacing_medium"
+                app:srcCompat="@drawable/ic_round_undo_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/redo"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                app:srcCompat="@drawable/ic_round_redo_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/speechRecognition"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="@dimen/spacing_medium"
+                app:srcCompat="@drawable/ic_round_mic_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/backgroundSurvey"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="@dimen/spacing_small"
+                app:srcCompat="@drawable/ic_round_category_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/audioFiles"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="9dp"
+                app:srcCompat="@drawable/ic_microsoft_groove_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <ImageView
+                android:id="@+id/save"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="@dimen/spacing_small"
+                app:srcCompat="@drawable/ic_round_check_24"
+                app:tint="@color/color_icon"
+                tools:ignore="ContentDescription" />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

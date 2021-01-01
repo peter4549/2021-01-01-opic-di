@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/nav_graph"
+    app:startDestination="@id/scriptsFragment">
+
+    <fragment
+        android:id="@+id/scriptsFragment"
+        android:name="com.duke.elliot.opicdi.main.ScriptsFragment"
+        android:label="ScriptsFragment" >
+        <action
+            android:id="@+id/action_scriptsFragment_to_scriptWritingFragment"
+            app:destination="@id/scriptWritingFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/scriptWritingFragment"
+        android:name="com.duke.elliot.opicdi.script.ScriptWritingFragment"
+        android:label="ScriptWritingFragment">
+
+        <argument
+            android:name="originalScript"
+            app:argType="com.duke.elliot.opicdi.database.Script"
+            app:nullable="true" />
+    </fragment>
+</navigation>
