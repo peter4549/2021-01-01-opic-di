@@ -20,5 +20,12 @@
             android:name="originalScript"
             app:argType="com.duke.elliot.opicdi.database.Script"
             app:nullable="true" />
+        <action
+            android:id="@+id/action_scriptWritingFragment_to_audioRecorderFragment"
+            app:destination="@id/audioRecorderFragment" />
     </fragment>
+    <fragment
+        android:id="@+id/audioRecorderFragment"
+        android:name="com.duke.elliot.opicdi.audio_recoder.AudioRecorderFragment"
+        android:label="AudioRecorderFragment" />
 </navigation>

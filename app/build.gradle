@@ -68,4 +68,14 @@ dependencies {
 
     // Gson
     implementation 'com.google.code.gson:gson:2.8.6'
+
+    // Dexter
+    implementation 'com.karumi:dexter:6.2.2'
+
+    // Timber
+    implementation 'com.jakewharton.timber:timber:4.7.1'
+
+    // RxAndroidAudio
+    implementation 'com.github.piasy:rxandroidaudio:1.6.0'
+    implementation 'com.github.piasy:AudioProcessor:1.6.0'
 }

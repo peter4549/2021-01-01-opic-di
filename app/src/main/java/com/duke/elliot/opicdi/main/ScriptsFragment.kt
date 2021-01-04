@@ -22,7 +22,7 @@ class ScriptsFragment: BaseFragment() {
         binding = DataBindingUtil.inflate(inflater, R.layout.fragment_scripts, container, false)
 
         binding.addScriptFloatingActionButton.setOnClickListener {
-            findNavController().navigate(ScriptsFragmentDirections.actionScriptsFragmentToScriptWritingFragment())
+            findNavController().navigate(ScriptsFragmentDirections.actionScriptsFragmentToScriptWritingFragment(null))
         }
 
         return binding.root

@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-const val APP_DATABASE_NAME = "com.duke.elliot.opicdi.database.app_data_base.debug.v1"
+const val APP_DATABASE_NAME = "com.duke.elliot.opicdi.database.app_data_base.debug.v2"
 
 @Database(entities = [Script::class], version = 1, exportSchema = false)
 @TypeConverters(Converters::class)

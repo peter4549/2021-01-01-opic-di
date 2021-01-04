@@ -28,7 +28,7 @@ class ScriptWritingFragment: BaseFragment() {
         val scriptWritingFragmentArgs by navArgs<ScriptWritingFragmentArgs>()
         val originalScript = scriptWritingFragmentArgs.originalScript
         val viewModelFactory = ScriptWritingViewModelFactory(requireActivity().application, originalScript)
-        val viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[ScriptWritingViewModel::class.java]
+        viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[ScriptWritingViewModel::class.java]
 
         setDisplayHomeAsUpEnabled(binding.toolbar)
         setOnHomePressedCallback {
@@ -36,6 +36,7 @@ class ScriptWritingFragment: BaseFragment() {
         }
 
         initText()
+        initToolsClickListener()
 
         return binding.root
     }
@@ -48,12 +49,18 @@ class ScriptWritingFragment: BaseFragment() {
     }
 
     private fun initToolsClickListener() {
+        binding.fragmentScriptWriting.audioFiles.setOnClickListener {
+            // TODO: Must be changed.
+            findNavController().navigate(ScriptWritingFragmentDirections.actionScriptWritingFragmentToAudioRecorderFragment())
+        }
         binding.fragmentScriptWriting.save.setOnClickListener {
 
         }
     }
-    
+
+    /*
     private fun createScript() = Script(
 
     )
+     */
 }

@@ -12,7 +12,8 @@ data class Script(
     var lastModifiedTime: Long,
     var title: String,
     var script: String,
-    var backgroundSurveys: Array<Int>,
+    var categories: Array<Int>,
+    var comboSet: Int,
     var audioFileUris: Array<String>,
 ): Parcelable {
     override fun equals(other: Any?): Boolean {
@@ -25,7 +26,7 @@ data class Script(
         if (lastModifiedTime != other.lastModifiedTime) return false
         if (title != other.title) return false
         if (script != other.script) return false
-        if (!backgroundSurveys.contentEquals(other.backgroundSurveys)) return false
+        if (!categories.contentEquals(other.categories)) return false
         if (!audioFileUris.contentEquals(other.audioFileUris)) return false
 
         return true
@@ -36,7 +37,7 @@ data class Script(
         result = 31 * result + lastModifiedTime.hashCode()
         result = 31 * result + title.hashCode()
         result = 31 * result + script.hashCode()
-        result = 31 * result + backgroundSurveys.contentHashCode()
+        result = 31 * result + categories.contentHashCode()
         result = 31 * result + audioFileUris.contentHashCode()
         return result
     }

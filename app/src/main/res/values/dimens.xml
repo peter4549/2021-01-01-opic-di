@@ -5,4 +5,24 @@
     <dimen name="spacing_medium">16dp</dimen>
     <dimen name="spacing_large">32dp</dimen>
     <dimen name="spacing_very_large">64dp</dimen>
+
+    <declare-styleable name="AudioRecordView">
+        <attr name="chunkWidth" format="dimension" />
+        <attr name="chunkMaxHeight" format="dimension" />
+        <attr name="chunkMinHeight" format="dimension" />
+        <attr name="chunkSpace" format="dimension" />
+        <attr name="chunkColor" format="color" />
+        <attr name="chunkRoundedCorners" format="boolean" />
+        <attr name="chunkAlignTo" format="enum">
+            <enum name="center" value="1" />
+            <enum name="bottom" value="2" />
+        </attr>
+        <attr name="chunkSoftTransition" format="boolean" />
+    </declare-styleable>
+
+    <dimen name="text_size_smallest">12sp</dimen>
+    <dimen name="text_size_small">14sp</dimen>
+    <dimen name="text_size_medium">16sp</dimen>
+    <dimen name="text_size_large">18sp</dimen>
+
 </resources>
