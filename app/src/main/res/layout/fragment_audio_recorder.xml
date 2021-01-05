@@ -31,7 +31,7 @@
             tools:text="00:00.00" />
 
 
-        <com.duke.elliot.opicdi.audio_recoder.view.AudioRecordView
+        <com.duke.elliot.opicdi.audio_recoder.view.AudioRecorderView
             android:id="@+id/audioRecordView"
             android:layout_width="wrap_content"
             android:layout_height="192dp"
@@ -40,15 +40,15 @@
             android:scrollbars="horizontal"
             app:chunkAlignTo="center"
             app:chunkColor="@color/white"
-            app:chunkMaxHeight="96dp"
+            app:chunkMaxHeight="144dp"
             app:chunkMinHeight="2dp"
             app:chunkRoundedCorners="true"
             app:chunkSoftTransition="true"
-            app:chunkSpace="0dp"
-            app:chunkWidth="0.25dp"
+            app:chunkSpace="0.0dp"
+            app:chunkWidth="0.5dp"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/recordingTimeTimer" />
-
 
         <SeekBar
             android:id="@+id/seekbar"
@@ -63,10 +63,11 @@
             app:layout_constraintTop_toBottomOf="@+id/audioRecordView" />
 
         <LinearLayout
+            android:id="@+id/linearLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
             android:layout_marginBottom="@dimen/spacing_large"
+            android:gravity="center"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">

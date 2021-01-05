@@ -11,6 +11,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.widget.SeekBar
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.marginStart
 import com.duke.elliot.opicdi.R
@@ -20,22 +21,36 @@ import com.duke.elliot.opicdi.util.toDateFormat
 import java.util.*
 
 
-class AudioRecordView : View {
+class AudioRecorderView : View {
 
     enum class AlignTo(var value: Int) {
         CENTER(1),
         BOTTOM(2)
     }
 
-    enum class State(var value: Int) {
-        PAUSE(0),
-        PLAYING(1),
-        RECORDING(2)
-    }
+    val timestampInterval = (DISPLAY_TIMESTAMP_INTERVAL_MILLISECONDS / DISPLAY_CHUNK_INTERVAL_MILLISECONDS).toInt()
+    var timestampHorizontalScale = 0F
+    var elapsedTime = 0L
+
+    /** 보이는 거만 그리도록 변경필수. */
+    private var visibleChunkCount = 0F
+    private var visibleChunkCountHalf = 0F
+    private var quarterVisibleChunkCount = 0F
+    private var halfWidth = 0
+    private var centerChunkIndex = 0
+    private var pivot = 0
+    private var recording = false
 
     /** Seek Bar */
     private var seekBar: SeekBar? = null
     var ignoreOnSeekBarChangeListenerInvoke = false
+
+    /** Timer Text View */
+    private var timerTextView: TextView? = null
+
+    fun setTimerTextView(timerTextView: TextView) {
+        this.timerTextView = timerTextView
+    }
 
     /** Scrubber */
     private var scrubberPosition = 0F
@@ -54,25 +69,28 @@ class AudioRecordView : View {
     private val gridPaint = android.graphics.Paint()
 
     private var lastChunkShift = 0F
-    private var reachedHalf = false
+    var reachedHalf = false
     private var displayedChunkLength = 0F
 
     private var usageWidth = 0F
+    private var usageTimeWidth = 0F
     private var chunkHeights = ArrayList<Float>()
     private var chunkWidths = ArrayList<Float>()
+    private var timeWidths = ArrayList<Float>()
     private var topBottomPadding = 6.toPx()
+    private var halfChunkCount = 0F
 
-    private var waveformShift = 0
+    private var waveformShift = 0F
     private var screenShift = 0
     private var viewWidth = 0F
     private var isMeasured = false
     private var playProgressPx = -1
     private var prevScreenShift = 0
     private var startX = 0f
-    var dX = 0f
-    var dY = 0f
+    private var startMargin = 0F
 
-    private var startMargin = 0
+    /** Timestamp */
+    private var timeStampInitMargin = 0
 
     var chunkSoftTransition = false
     var chunkColor = Color.RED
@@ -123,10 +141,12 @@ class AudioRecordView : View {
         // set the final measured viewWidth and height.
         val width = MeasureSpec.getSize(widthMeasureSpec)
         viewWidth = width.toFloat()
-        startMargin = width / 4
+        startMargin = viewWidth / 2
+        halfWidth = width / 2
+
 
         screenShift = -playProgressPx
-        waveformShift = (viewWidth / 2).toInt()
+        waveformShift = (viewWidth / 2)
        //  prevScreenShift = screenShift
 
         setMeasuredDimension(
@@ -202,12 +222,13 @@ class AudioRecordView : View {
                 scrubberPaint.color = ContextCompat.getColor(context, R.color.teal_200)
 
                 /** Timestamp */
-                textPaint.color = ContextCompat.getColor(context, R.color.purple_200)
+                textPaint.color = ContextCompat.getColor(context, R.color.white)
                 textPaint.strokeWidth = 2.toPx()
                 textPaint.textAlign = Paint.Align.CENTER
-                textPaint.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                textPaint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 textHeight = context.resources.getDimension(R.dimen.text_size_small)
                 textPaint.textSize = textHeight
+                timestampHorizontalScale = timestampInterval * (chunkWidth + chunkSpace)
 
                 /** Grid */
                 gridPaint.color = ContextCompat.getColor(context, R.color.dark_gray)
@@ -230,26 +251,20 @@ class AudioRecordView : View {
                         val chunkHorizontalScale = chunkWidth + chunkSpace
                         val maxChunkCount = (width / chunkHorizontalScale) / 5
 
-                        waveformShift += (motionEvent.x - startX).toInt() / 4//(motionEvent.x - startX).toInt() / 8
+                        val movedPx = (motionEvent.x - startX)
+                        waveformShift += (motionEvent.x - startX) / 8//(motionEvent.x - startX).toInt() / 8
 
+                        println("moved PX: $movedPx")
+                        println("to Index.. : ${movedPx / chunkWidth}")
+                        pivot -= (movedPx / chunkWidth).toInt() / 2 // 피벗 레인지 지정.
 
-                        println("startX: $startX,, px: ${startX.toPx()}, dp: ${startX.toDp()}")
-                        println("eventX: ${motionEvent.x},, px: ${motionEvent.x.toPx()},, dp: ${motionEvent.x.toDp()}")
-                        println("shiftedmargin: $waveformShift")
+                        if (pivot < 0)
+                            pivot = 0
+                        else if (pivot > chunkHeights.size.dec())
+                            pivot = chunkHeights.size.dec()
 
-                        if (chunkWidths.isNotEmpty()) {
-                            val constraintStart = width / 2
-                            val constraintEnd = chunkWidths.last() - (width * 0.5)
-
-                            when {
-                                waveformShift >= constraintStart -> waveformShift = constraintStart
-                                waveformShift <= -constraintEnd -> waveformShift = -constraintEnd.toInt()
-                            }
-
-                            setSeekBarProgress(waveformShift)
-                            invalidate()
-                            println("OOOOOOOOO: $waveformShift mcc $maxChunkCount interval: $chunkHorizontalScale")
-                        }
+                        setSeekBarProgress(pivot)
+                        invalidate()
                     }
                     MotionEvent.ACTION_UP -> {
                         prevScreenShift = screenShift
@@ -263,38 +278,50 @@ class AudioRecordView : View {
 
     private fun updateShifts(px: Int) {
         screenShift = px
-        waveformShift = (screenShift + viewWidth / 2).toInt()
+        waveformShift = (screenShift + viewWidth / 2)
     }
 
     private fun handleNewFFT(fft: Int) {
+        recording = true
+
         if (fft == 0)
             return
 
         val chunkHorizontalScale = chunkWidth + chunkSpace
-        val quarterMaxChunkCount = (width / chunkHorizontalScale) / 4
-
-        /*
-        if (chunkHeights.isNotEmpty() && chunkHeights.size >= maxChunkCount) {
-            chunkHeights.removeAt(0)
-        } else {
-            usageWidth += chunkHorizontalScale
-            chunkWidths.add(chunkWidths.size, usageWidth)
-        }
-
-         */
+        visibleChunkCountHalf = (viewWidth / chunkHorizontalScale) / 2
+        visibleChunkCount = (viewWidth / chunkHorizontalScale)
 
         waveformShift = startMargin
         // TODO chunck 0에 마진을 미리 더해준다.
 
-
-        if (chunkHeights.isNotEmpty() && chunkHeights.size >= quarterMaxChunkCount) {
-            waveformShift -= (chunkHorizontalScale * (chunkHeights.size - quarterMaxChunkCount)).toInt()
+        if (chunkHeights.isNotEmpty() && chunkHeights.size > visibleChunkCountHalf) {
+            waveformShift -= (chunkHorizontalScale * (chunkHeights.size - visibleChunkCountHalf))
             // waveformShift -= startMargin
             reachedHalf = true
         }
 
+        println("WAV SHIFT: $waveformShift")
+        println("heights size: ${chunkHeights.size}")
+        println("result: ${chunkHorizontalScale * (chunkHeights.size - visibleChunkCountHalf)}")
+        println("lastupdatetime: $lastUpdateTime")
+
+
+        if (chunkWidths.isEmpty() || chunkWidths.size % (timestampInterval * 3) == 0) {
+            for (i in 0..3) {
+                timeWidths.add(timeWidths.size, usageTimeWidth)
+                usageTimeWidth += (timestampHorizontalScale)
+            }
+
+            if (chunkWidths.isNotEmpty()) {
+                println("CCCCCC: ${chunkWidths.last()}")
+            }
+        }
+
         usageWidth += chunkHorizontalScale
         chunkWidths.add(chunkWidths.size, usageWidth)
+
+        elapsedTime += DISPLAY_CHUNK_INTERVAL_MILLISECONDS
+        timerTextView?.text = elapsedTime.toDateFormat("mm:ss.SS")
 
         if (chunkMaxHeight == uninitialized) {
             chunkMaxHeight = height - (topBottomPadding * 2)
@@ -328,6 +355,7 @@ class AudioRecordView : View {
         }
 
         chunkHeights.add(chunkHeights.size, fftPoint)
+        pivot = chunkHeights.size.dec()
     }
 
     private fun calculateScaleFactor(updateTimeInterval: Long): Float {
@@ -343,84 +371,205 @@ class AudioRecordView : View {
     }
 
     private fun drawChunks(canvas: Canvas) {
-        when (chunkAlignTo) {
-            AlignTo.BOTTOM -> drawAlignBottom(canvas)
-            else -> {
-                drawAlignCenter(canvas)
-                drawGrid(canvas)
-            }
-        }
+        newDraw2(canvas)
+        drawTimestamp(canvas)
+        /** Scrubber */
+        canvas.drawLine(
+                halfWidth.toFloat(),
+                0F,
+                halfWidth.toFloat(),
+                measuredHeight.toFloat(),
+                scrubberPaint
+        )
     }
 
     private fun drawAlignCenter(canvas: Canvas) {
         val verticalCenter = height / 2
-        for (i in 0 until chunkHeights.size - 1) {
-            val chunkX = chunkWidths[i]
-            val startY = verticalCenter - chunkHeights[i] / 2
-            val stopY = verticalCenter + chunkHeights[i] / 2
 
-            /** Chunk */
-            canvas.drawLine(
-                    chunkX + waveformShift,
-                    startY,
-                    chunkX + waveformShift,
-                    stopY,
-                    chunkPaint
-            )
+        if (!reachedHalf) {
+            for (i in 0 until chunkHeights.size.dec()) {
+                val chunkX = chunkWidths[i]
+                val startY = verticalCenter - chunkHeights[i] / 2
+                val stopY = verticalCenter + chunkHeights[i] / 2
 
-            if (!reachedHalf && i == chunkHeights.size - 2) {
-                lastChunkShift = chunkX + waveformShift
-                displayedChunkLength = lastChunkShift - startMargin
-
-                /** Scrubber */
-                scrubberPosition = chunkX + waveformShift
+                /** Chunk */
                 canvas.drawLine(
-                        scrubberPosition,
-                        0F,
-                        scrubberPosition,
-                        measuredHeight.toFloat(),
-                        scrubberPaint
+                        chunkX + waveformShift,
+                        startY,
+                        chunkX + waveformShift,
+                        stopY,
+                        chunkPaint
                 )
+                if (!reachedHalf && i == chunkHeights.size - 2) {
+                    lastChunkShift = chunkX + waveformShift
+                    displayedChunkLength = lastChunkShift - startMargin
+
+                    /** Scrubber */
+                    scrubberPosition = chunkX + waveformShift
+                    canvas.drawLine(
+                            scrubberPosition,
+                            0F,
+                            scrubberPosition,
+                            measuredHeight.toFloat(),
+                            scrubberPaint
+                    )
+                }
             }
-        }
+        } else {
+            if (chunkHeights.size > halfChunkCount) {
+                for (i in (chunkHeights.size - (halfChunkCount)).toInt() until chunkHeights.size.dec()) {
+                    val chunkX = chunkWidths[i]
+                    val startY = verticalCenter - chunkHeights[i] / 2
+                    val stopY = verticalCenter + chunkHeights[i] / 2
 
-    }
+                    /** Chunk */
+                    canvas.drawLine(
+                            chunkX + waveformShift,
+                            startY,
+                            chunkX + waveformShift,
+                            stopY,
+                            chunkPaint
+                    )
+                    if (!reachedHalf && i == chunkHeights.size - 2) {
+                        lastChunkShift = chunkX + waveformShift
+                        displayedChunkLength = lastChunkShift - startMargin
 
-    private fun drawAlignBottom(canvas: Canvas) {
-        for (i in 0 until chunkHeights.size - 1) {
-            val chunkX = chunkWidths[i]
-            val startY = height.toFloat() - topBottomPadding
-            val stopY = startY - chunkHeights[i]
+                        /** Scrubber */
+                        scrubberPosition = chunkX + waveformShift
+                        canvas.drawLine(
+                                scrubberPosition,
+                                0F,
+                                scrubberPosition,
+                                measuredHeight.toFloat(),
+                                scrubberPaint
+                        )
+                    }
+                }
+            }
+                else {
+                for (i in (chunkHeights.size - (halfChunkCount / 2)).toInt() until chunkHeights.size.dec()) {
+                    val chunkX = chunkWidths[i]
+                    val startY = verticalCenter - chunkHeights[i] / 2
+                    val stopY = verticalCenter + chunkHeights[i] / 2
 
-            canvas.drawLine(chunkX, startY, chunkX, stopY, chunkPaint)
+                    /** Chunk */
+                    canvas.drawLine(
+                            chunkX + waveformShift,
+                            startY,
+                            chunkX + waveformShift,
+                            stopY,
+                            chunkPaint
+                    )
+                    if (!reachedHalf && i == chunkHeights.size - 2) {
+                        lastChunkShift = chunkX + waveformShift
+                        displayedChunkLength = lastChunkShift - startMargin
+
+                        /** Scrubber */
+                        scrubberPosition = chunkX + waveformShift
+                        canvas.drawLine(
+                                scrubberPosition,
+                                0F,
+                                scrubberPosition,
+                                measuredHeight.toFloat(),
+                                scrubberPaint
+                        )
+                    }
+                }
+            }
         }
     }
 
     private fun drawGrid(canvas: Canvas) {
-        val timestampInterval = (DISPLAY_TIMESTAMP_INTERVAL_MILLISECONDS / DISPLAY_CHUNK_INTERVAL_MILLISECONDS).toInt()
-        val chunkHorizontalScale = chunkWidth + chunkSpace
+        /** Timestamp */
+        for (i in 0 until timeWidths.size.dec()) {
+            val timeWidth = timeWidths[i]
 
-        for (i in 0 until chunkHeights.size.dec()) {
-            val chunkX = chunkWidths[i]
+            canvas.drawText(
+                    (i * DISPLAY_TIMESTAMP_INTERVAL_MILLISECONDS).toTimestampString(),
+                    timeWidth + waveformShift,
+                    textHeight,
+                    textPaint)
 
-            /** Timestamp */
-            if (i % (timestampInterval * 2) == 0) {
-                for (j in 0 until 8) {
-                    canvas.drawText(
-                            ((i + (timestampInterval) * j) * DISPLAY_CHUNK_INTERVAL_MILLISECONDS).toTimestampString(),
-                            chunkX + waveformShift + chunkHorizontalScale * timestampInterval * j,
-                            textHeight,
-                            textPaint
-                    )
+            println("timewidth: $timeWidth")
 
-                    val inset = 6.toDp()
+            val inset = 6.toDp()
 
-                    canvas.drawLine(chunkX + waveformShift + chunkHorizontalScale * timestampInterval * j,
-                            height - inset, chunkX + waveformShift + chunkHorizontalScale * timestampInterval * j,
-                            inset, gridPaint)
-                }
+            canvas.drawLine(timeWidth + waveformShift,
+                    height - inset, timeWidth + waveformShift,
+                    inset, gridPaint)
+        }
+    }
+
+    private fun newDraw2(canvas: Canvas) {
+        val verticalCenter = height / 2
+
+        var range = if (pivot > visibleChunkCountHalf)
+            visibleChunkCountHalf.toInt()
+        else
+            pivot
+
+        for (i in 1 until range.inc()) {
+            val startX = halfWidth - chunkWidth * i
+            val startY = verticalCenter - chunkHeights[pivot - i] / 2
+            val stopY = verticalCenter + chunkHeights[pivot - i] / 2
+            canvas.drawLine(
+                    startX,
+                    startY,
+                    startX,
+                    stopY,
+                    chunkPaint)
+        }
+
+        if (!recording) {
+            range = if (chunkHeights.size - pivot > visibleChunkCountHalf)
+                visibleChunkCountHalf.toInt()
+            else
+                chunkHeights.size - pivot
+
+            for (i in 0 until range) {
+                val startX = halfWidth + chunkWidth * i
+                val startY = verticalCenter - chunkHeights[pivot + i] / 2
+                val stopY = verticalCenter + chunkHeights[pivot + i] / 2
+                canvas.drawLine(
+                        startX,
+                        startY,
+                        startX,
+                        stopY,
+                        chunkPaint)
             }
+        }
 
+        recording = false
+    }
+
+    private fun drawTimestamp(canvas: Canvas) {
+        var start = pivot - visibleChunkCount.toInt()
+
+        if (start < 0)
+            start = 0
+
+        val end = pivot + visibleChunkCount.toInt()
+
+        for (i in start..end) {
+            if (i % timestampInterval == 0) {
+                println("IIIIII: $i")
+                println("IIIIII: ${i * DISPLAY_TIMESTAMP_INTERVAL_MILLISECONDS}")
+                val x = if (i <= pivot)
+                    halfWidth - (pivot - i) * chunkWidth
+                else
+                    halfWidth + (i - pivot) * chunkWidth
+                canvas.drawText(
+                        (i * DISPLAY_CHUNK_INTERVAL_MILLISECONDS).toTimestampString(),
+                        x,
+                        textHeight,
+                        textPaint)
+
+                val inset = 6.toDp()
+
+                canvas.drawLine(x,
+                        height - inset, x,
+                        inset, gridPaint)
+            }
         }
     }
 
@@ -430,8 +579,8 @@ class AudioRecordView : View {
      *
      */
     fun moveAccordingToProgress(progress: Int, maxProgress: Int) {
-        val shift = progress * ((chunkWidths.last() - marginStart) / maxProgress)
-        waveformShift = -shift.toInt() + (width / 2)
+        val shift = progress * (chunkHeights.size / maxProgress.toFloat())
+        pivot = shift.toInt()
         invalidate()
     }
 
@@ -441,8 +590,7 @@ class AudioRecordView : View {
 
     fun setSeekBarProgress(shift: Int) {
         seekBar?.let {
-            val s = (width / 2) - shift
-            val pr = s * it.max / (chunkWidths.last() - marginStart)
+            val pr = shift * it.max / chunkHeights.size.toFloat()
             it.progress = pr.toInt()
         }
 

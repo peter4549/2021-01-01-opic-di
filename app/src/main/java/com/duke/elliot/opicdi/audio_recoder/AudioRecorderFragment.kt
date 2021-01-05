@@ -11,6 +11,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
+import android.widget.TextView
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
@@ -53,15 +54,18 @@ class AudioRecorderFragment: BaseFragment() {
     private var player: StreamAudioPlayer? = null
     private var recorder: StreamAudioRecorder? = null
     private lateinit var fileOutputStream: FileOutputStream
+    private lateinit var inputStream: FileInputStream
     private lateinit var outputFile: File
     private lateinit var timer: Timer
     private var recordingTime = 0L
     private var displayedTime = 0L
     var buffer = ByteArray(BUFFER_SIZE)
+    var writeBufferCount = 0
 
     private var byteCorrespondingToSeekBar = 0
 
-    var audioFileSize = 0
+    // var audioFileSize = 0
+    var bufferCount = 0
 
     private val job = Job()
     private val coroutineScope = CoroutineScope(Dispatchers.Main + job)
@@ -87,6 +91,7 @@ class AudioRecorderFragment: BaseFragment() {
         updateUI(STOP)
         initSeekBar()
         binding.audioRecordView.registerSeekBar(binding.seekbar)
+        binding.audioRecordView.setTimerTextView(binding.recordingTimeTimer)
 
         binding.playPause.setOnClickListener {
             onPlay()
@@ -133,6 +138,7 @@ class AudioRecorderFragment: BaseFragment() {
             STOP -> startRecording()
             RECORDING -> pauseRecording()
             PAUSE_RECORDING -> resumeRecording()
+            PAUSE_PLAYING -> resumeRecording()
         }
     }
 
@@ -209,24 +215,26 @@ class AudioRecorderFragment: BaseFragment() {
         Observable.just(outputFile).subscribeOn(Schedulers.io()).subscribe { file ->
             try {
                 player?.init()
-                val inputStream = FileInputStream(file)
+                inputStream = FileInputStream(file)
 
-                audioFileSize = inputStream.available()
-                binding.seekbar.max = audioFileSize
-                var read: Int
+                val audioFileSize = inputStream.available()
+                binding.seekbar.max = audioFileSize / BUFFER_SIZE
 
                 // byteCorrespondingToSeekBar 만큼 pass 해야함.
-                byteCorrespondingToSeekBar = (audioFileSize * (binding.seekbar.progress / binding.seekbar.max.toFloat())).toInt()
+                byteCorrespondingToSeekBar = (bufferCount * (binding.seekbar.progress / binding.seekbar.max.toFloat())).toInt()
                 //inputStream.read(ByteArray(byteCorrespondingToSeekBar))
-                inputStream.skip(byteCorrespondingToSeekBar.toLong())
+                inputStream.skip((byteCorrespondingToSeekBar * BUFFER_SIZE).toLong())
 
-                println("BBBBBBBBB: $byteCorrespondingToSeekBar")
-                var playedBytes = byteCorrespondingToSeekBar
+                var playedBytes = byteCorrespondingToSeekBar * BUFFER_SIZE
+                var read: Int
                 while (inputStream.read(buffer).also { read = it } > 0) {
                     player?.play(buffer, read)
                     playedBytes += buffer.size
                     coroutineScope.launch {
-                        binding.seekbar.setProgress(playedBytes)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
+                            binding.seekbar.setProgress(playedBytes / BUFFER_SIZE, true)
+                        else
+                            binding.seekbar.progress = playedBytes / BUFFER_SIZE
                     }
                 }
 
@@ -246,6 +254,7 @@ class AudioRecorderFragment: BaseFragment() {
     private fun pausePlaying() {
         updateUI(PAUSE_PLAYING)
         viewModel.state = PAUSE_PLAYING
+        inputStream.close()
         player?.release()
     }
 
@@ -276,23 +285,26 @@ class AudioRecorderFragment: BaseFragment() {
                     timer.schedule(object : TimerTask() {
                         override fun run() {
                             val shorts = ShortArray(data.size / 2)
-                            ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                                    .get(
-                                            shorts
-                                    )
+                            ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
 
                             shorts.maxOrNull()?.let {
                                 binding.audioRecordView.update(abs(it.toInt()) * 2)
                             }
+
+                            //recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
+                            //binding.recordingTimeTimer.text = recordingTime.toDateFormat("mm:ss.SS")
                         }
                     }, 0, DISPLAY_CHUNK_INTERVAL_MILLISECONDS)
 
+                    /*
                     timer.schedule(object : TimerTask() {
                         override fun run() {
                             recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
                             binding.recordingTimeTimer.text = recordingTime.toDateFormat("mm:ss.SS")
                         }
                     }, 0, RECORDING_TIME_INTERVAL_MILLISECONDS)
+
+                     */
 
                     isTimerScheduled = true
                 }
@@ -313,17 +325,24 @@ class AudioRecorderFragment: BaseFragment() {
             timer.cancel()
 
         val inputStream = FileInputStream(viewModel.audioFilePath)
-        audioFileSize = inputStream.available()
+        //audioFileSize = inputStream.available()
+        bufferCount = inputStream.available() / BUFFER_SIZE
+        inputStream.close()
 
         /** Seek Bar */
-        // binding.seekbar.max = recordingTime.toInt()
+        binding.seekbar.max = bufferCount
+        binding.seekbar.progress = bufferCount
+        binding.audioRecordView.invalidate()
     }
 
     private fun resumeRecording() {
         updateUI(RECORDING)
         viewModel.state = RECORDING
 
+        binding.audioRecordView.reachedHalf = false // 기존의 리치드로..
+
         var isTimerScheduled = false
+        writeBufferCount = 0
 
         fileOutputStream = FileOutputStream(outputFile, true)
         recorder = StreamAudioRecorder.getInstance()
@@ -333,7 +352,7 @@ class AudioRecorderFragment: BaseFragment() {
                 // TODO: move cursor logic for overwriting.
 
                 fileOutputStream.write(data, 0, data.size)
-
+                ++writeBufferCount
                 if (!isTimerScheduled) {
                     timer = Timer()
                     timer.schedule(object : TimerTask() {
@@ -347,15 +366,21 @@ class AudioRecorderFragment: BaseFragment() {
                             shorts.maxOrNull()?.let {
                                 binding.audioRecordView.update(abs(it.toInt()) * 2)
                             }
+
+                            //recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
+                            //binding.recordingTimeTimer.text = recordingTime.toDateFormat("mm:ss.SS")
                         }
                     }, 0, DISPLAY_CHUNK_INTERVAL_MILLISECONDS)
 
+                    /*
                     timer.schedule(object : TimerTask() {
                         override fun run() {
                             recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
                             binding.recordingTimeTimer.text = recordingTime.toDateFormat("mm:ss.SS")
                         }
                     }, 0, RECORDING_TIME_INTERVAL_MILLISECONDS)
+
+                     */
 
                     isTimerScheduled = true
                 }
@@ -386,8 +411,8 @@ class AudioRecorderFragment: BaseFragment() {
 
                 }
 
-                val changedTime = progress * (recordingTime / audioFileSize.toFloat())
-                println("LLLLL: $progress,,, $recordingTime,,, $audioFileSize,,, $changedTime")
+                val changedTime = progress * (binding.audioRecordView.elapsedTime / bufferCount.toFloat())
+                // println("LLLLL: $progress,,, $recordingTime,,, $audioFileSize,,, $changedTime")
                 // TODO, 레코딩 퍼즈시, audioFileSize 반드시 업데이트 할것.
                 binding.recordingTimeTimer.text = changedTime.toLong().toDateFormat("mm:ss.SS")
             }
