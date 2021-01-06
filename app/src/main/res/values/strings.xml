@@ -15,4 +15,7 @@
     <string name="deny">거부</string>
     <string name="request_record_audio_permission_title"></string>
     <string name="request_record_audio_permission_message"></string>
+
+    <!-- Audio Recorder -->
+    <string name="audio_player_playback_failure_message">오디오를 재생할 수 없습니다.</string>
 </resources>

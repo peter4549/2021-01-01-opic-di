@@ -13,11 +13,23 @@
         <attr name="chunkSpace" format="dimension" />
         <attr name="chunkColor" format="color" />
         <attr name="chunkRoundedCorners" format="boolean" />
-        <attr name="chunkAlignTo" format="enum">
-            <enum name="center" value="1" />
-            <enum name="bottom" value="2" />
-        </attr>
         <attr name="chunkSoftTransition" format="boolean" />
+
+        <attr name="scrubberColor" format="color" />
+        <attr name="scrubberWidth" format="dimension" />
+
+        <attr name="timestampTextBackgroundColor" format="color" />
+        <attr name="timestampTextColor" format="color" />
+        <attr name="timestampTextSize" format="dimension" />
+
+        <attr name="gridVisibility" format="boolean" />
+        <attr name="gridWidth" format="dimension" />
+        <attr name="gridColor" format="color" />
+
+        <attr name="subGridVisibility" format="boolean" />
+        <attr name="subGridWidth" format="dimension" />
+        <attr name="subGridColor" format="color" />
+        <attr name="subGridCount" format="integer" />
     </declare-styleable>
 
     <dimen name="text_size_smallest">12sp</dimen>

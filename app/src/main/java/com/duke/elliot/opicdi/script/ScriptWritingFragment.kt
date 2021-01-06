@@ -1,5 +1,6 @@
 package com.duke.elliot.opicdi.script
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -9,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.duke.elliot.opicdi.R
+import com.duke.elliot.opicdi.audio_recoder.AudioRecorderActivity
 import com.duke.elliot.opicdi.base.BaseFragment
 import com.duke.elliot.opicdi.database.Script
 import com.duke.elliot.opicdi.databinding.FragmentScriptWritingDrawerBinding
@@ -51,7 +53,9 @@ class ScriptWritingFragment: BaseFragment() {
     private fun initToolsClickListener() {
         binding.fragmentScriptWriting.audioFiles.setOnClickListener {
             // TODO: Must be changed.
-            findNavController().navigate(ScriptWritingFragmentDirections.actionScriptWritingFragmentToAudioRecorderFragment())
+            val intent = Intent(requireContext(), AudioRecorderActivity::class.java)
+            startActivity(intent)
+            // findNavController().navigate(ScriptWritingFragmentDirections.actionScriptWritingFragmentToAudioRecorderFragment())
         }
         binding.fragmentScriptWriting.save.setOnClickListener {
 

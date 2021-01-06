@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_large"
             android:gravity="center"
-            android:textSize="24sp"
+            android:textSize="40sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/toolbar"
@@ -32,31 +32,36 @@
 
 
         <com.duke.elliot.opicdi.audio_recoder.view.AudioRecorderView
-            android:id="@+id/audioRecordView"
+            android:id="@+id/audioRecorderView"
             android:layout_width="wrap_content"
-            android:layout_height="192dp"
+            android:layout_height="216dp"
             android:layout_marginTop="@dimen/spacing_very_large"
             android:background="@color/audio_player_view_background"
+            android:scrollbars="horizontal"
             app:chunkColor="@color/white"
             app:chunkMaxHeight="144dp"
             app:chunkMinHeight="2dp"
             app:chunkRoundedCorners="true"
             app:chunkSoftTransition="true"
+            app:chunkSpace="0.0dp"
+            app:chunkWidth="0.5dp"
+            app:scrubberColor="@android:color/holo_blue_bright"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/recordingTimeTimer" />
 
         <SeekBar
-            android:id="@+id/seekbar"
+            android:id="@+id/seekBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:layout_marginEnd="@dimen/spacing_medium"
             android:layout_marginStart="@dimen/spacing_medium"
             android:layout_marginTop="@dimen/spacing_small"
+            android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/audioRecordView" />
+            app:layout_constraintTop_toBottomOf="@+id/audioRecorderView" />
 
         <LinearLayout
             android:id="@+id/linearLayout"
@@ -80,7 +85,8 @@
                 android:id="@+id/recordPause"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                app:srcCompat="@drawable/ic_round_fiber_manual_record_24" />
+                app:srcCompat="@drawable/ic_round_fiber_manual_record_24"
+                tools:ignore="ContentDescription" />
 
             <ImageView
                 android:id="@+id/stop"

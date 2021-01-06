@@ -2,16 +2,13 @@ package com.duke.elliot.opicdi.audio_recoder
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.media.AudioManager
-import android.media.MediaMetadataRetriever
-import android.media.MediaPlayer
-import android.media.MediaPlayer.OnBufferingUpdateListener
+import android.content.Context
+import android.media.MediaRecorder
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
-import android.widget.TextView
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
@@ -29,7 +26,6 @@ import com.karumi.dexter.listener.PermissionGrantedResponse
 import com.karumi.dexter.listener.PermissionRequest
 import com.karumi.dexter.listener.single.PermissionListener
 import io.reactivex.Observable
-import io.reactivex.Single.just
 import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +77,7 @@ class AudioRecorderFragment: BaseFragment() {
                 container,
                 false
         )
+
         val viewModelFactory = AudioRecorderViewModelFactory(requireActivity().application)
         viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[AudioRecorderViewModel::class.java]
 
@@ -91,7 +88,7 @@ class AudioRecorderFragment: BaseFragment() {
         updateUI(STOP)
         initSeekBar()
         binding.audioRecordView.registerSeekBar(binding.seekbar)
-        binding.audioRecordView.setTimerTextView(binding.recordingTimeTimer)
+        binding.audioRecordView.registerTimerTextView(binding.recordingTimeTimer)
 
         binding.playPause.setOnClickListener {
             onPlay()
@@ -110,6 +107,8 @@ class AudioRecorderFragment: BaseFragment() {
                 RECORDING -> stopRecording()
             }
         }
+
+        showToast(microphoneAvailable(requireContext()).toString())
 
         return binding.root
     }
@@ -288,7 +287,7 @@ class AudioRecorderFragment: BaseFragment() {
                             ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
 
                             shorts.maxOrNull()?.let {
-                                binding.audioRecordView.update(abs(it.toInt()) * 2)
+                                binding.audioRecordView.update(abs(it.toInt()))
                             }
 
                             //recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
@@ -339,7 +338,7 @@ class AudioRecorderFragment: BaseFragment() {
         updateUI(RECORDING)
         viewModel.state = RECORDING
 
-        binding.audioRecordView.reachedHalf = false // 기존의 리치드로..
+        binding.audioRecordView.halfReached = false // 기존의 리치드로..
 
         var isTimerScheduled = false
         writeBufferCount = 0
@@ -364,7 +363,7 @@ class AudioRecorderFragment: BaseFragment() {
                                     )
 
                             shorts.maxOrNull()?.let {
-                                binding.audioRecordView.update(abs(it.toInt()) * 2)
+                                binding.audioRecordView.update(abs(it.toInt()))
                             }
 
                             //recordingTime += RECORDING_TIME_INTERVAL_MILLISECONDS
@@ -406,7 +405,7 @@ class AudioRecorderFragment: BaseFragment() {
     private fun initSeekBar() {
         binding.seekbar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if(!binding.audioRecordView.ignoreOnSeekBarChangeListenerInvoke) {
+                if (!binding.audioRecordView.ignoreOnSeekBarChangeListenerInvoke) {
                     binding.audioRecordView.moveAccordingToProgress(progress, seekBar.max) // TODO: 조건문 내부적으로 처리.
 
                 }
@@ -425,6 +424,23 @@ class AudioRecorderFragment: BaseFragment() {
 
             }
         })
+    }
+
+    private fun microphoneAvailable(context: Context): Boolean {
+        val recorder = MediaRecorder()
+        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+        recorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT)
+        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT)
+        recorder.setOutputFile(File(context.cacheDir, "MediaUtil#micAvailTestFile").absolutePath)
+        var available = true
+        try {
+            recorder.prepare()
+            recorder.start()
+        } catch (exception: Exception) {
+            available = false
+        }
+        recorder.release()
+        return available
     }
 
     companion object {
