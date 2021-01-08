@@ -11,8 +11,8 @@
     <color name="silver">#C0C0C0</color>
     <color name="onyx">#353839</color>
 
-    <color name="icon_enabled">@color/dark_gray</color>
-    <color name="icon_disabled">@color/silver</color>
+    <color name="icon_enabled">@color/white</color>
+    <color name="icon_disabled">@color/grey_800</color>
 
     <color name="audio_player_view_background">@color/onyx</color>
 </resources>

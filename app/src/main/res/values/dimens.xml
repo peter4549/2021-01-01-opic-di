@@ -4,16 +4,17 @@
     <dimen name="spacing_small">8dp</dimen>
     <dimen name="spacing_medium">16dp</dimen>
     <dimen name="spacing_large">32dp</dimen>
-    <dimen name="spacing_very_large">64dp</dimen>
+    <dimen name="spacing_very_large">48dp</dimen>
+    <dimen name="spacing_largest">64dp</dimen>
 
-    <declare-styleable name="AudioRecordView">
-        <attr name="chunkWidth" format="dimension" />
-        <attr name="chunkMaxHeight" format="dimension" />
-        <attr name="chunkMinHeight" format="dimension" />
-        <attr name="chunkSpace" format="dimension" />
-        <attr name="chunkColor" format="color" />
-        <attr name="chunkRoundedCorners" format="boolean" />
-        <attr name="chunkSoftTransition" format="boolean" />
+    <declare-styleable name="WaveformView">
+        <attr name="pulseWidth" format="dimension" />
+        <attr name="maximumAmplitude" format="dimension" />
+        <attr name="minimumAmplitude" format="dimension" />
+        <attr name="pulseSpacing" format="dimension" />
+        <attr name="pulseColor" format="color" />
+        <attr name="pulseRoundedCorners" format="boolean" />
+        <attr name="pulseSmoothTransition" format="boolean" />
 
         <attr name="scrubberColor" format="color" />
         <attr name="scrubberWidth" format="dimension" />
@@ -30,6 +31,8 @@
         <attr name="subGridWidth" format="dimension" />
         <attr name="subGridColor" format="color" />
         <attr name="subGridCount" format="integer" />
+
+        <attr name="overwrittenPulseColor" format="color" />
     </declare-styleable>
 
     <dimen name="text_size_smallest">12sp</dimen>
