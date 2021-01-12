@@ -3,6 +3,7 @@
     <dimen name="spacing_very_small">4dp</dimen>
     <dimen name="spacing_small">8dp</dimen>
     <dimen name="spacing_medium">16dp</dimen>
+    <dimen name="spacing_medium_large">24dp</dimen>
     <dimen name="spacing_large">32dp</dimen>
     <dimen name="spacing_very_large">48dp</dimen>
     <dimen name="spacing_largest">64dp</dimen>
@@ -39,5 +40,7 @@
     <dimen name="text_size_small">14sp</dimen>
     <dimen name="text_size_medium">16sp</dimen>
     <dimen name="text_size_large">18sp</dimen>
+
+    <dimen name="notification_image_button">56dp</dimen>
 
 </resources>

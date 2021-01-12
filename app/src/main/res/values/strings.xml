@@ -18,4 +18,6 @@
 
     <!-- Audio Recorder -->
     <string name="audio_player_playback_failure_message">오디오를 재생할 수 없습니다.</string>
+    <string name="audio_file_name_input_dialog_title">파일 이름을 입력하세요.</string>
+    <string name="microphone_unavailable_message">마이크를 사용할 수 없습니다.</string>
 </resources>

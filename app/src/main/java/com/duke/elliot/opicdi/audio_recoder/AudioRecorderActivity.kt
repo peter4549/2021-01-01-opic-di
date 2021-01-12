@@ -2,10 +2,23 @@ package com.duke.elliot.opicdi.audio_recoder
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.media.AudioFormat
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.RemoteViews
+import android.widget.SeekBar
+import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
 import androidx.core.view.isVisible
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
@@ -13,15 +26,19 @@ import com.duke.elliot.opicdi.R
 import com.duke.elliot.opicdi.audio_recoder.view.WaveformView
 import com.duke.elliot.opicdi.base.BaseActivity
 import com.duke.elliot.opicdi.databinding.ActivityAudioRecorderBinding
-import com.duke.elliot.opicdi.util.*
+import com.duke.elliot.opicdi.util.isNotZero
+import com.duke.elliot.opicdi.util.progressRate
+import com.duke.elliot.opicdi.util.scale
+import com.duke.elliot.opicdi.util.toDateFormat
+import com.github.hiteshsondhi88.libffmpeg.ExecuteBinaryResponseHandler
+import com.github.hiteshsondhi88.libffmpeg.FFmpeg
+import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException
 import com.github.piasy.rxandroidaudio.StreamAudioPlayer
-import com.github.piasy.rxandroidaudio.StreamAudioRecorder
 import com.karumi.dexter.Dexter
+import com.karumi.dexter.MultiplePermissionsReport
 import com.karumi.dexter.PermissionToken
-import com.karumi.dexter.listener.PermissionDeniedResponse
-import com.karumi.dexter.listener.PermissionGrantedResponse
 import com.karumi.dexter.listener.PermissionRequest
-import com.karumi.dexter.listener.single.PermissionListener
+import com.karumi.dexter.listener.multi.MultiplePermissionsListener
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.CoroutineScope
@@ -29,24 +46,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.io.*
+import java.io.File
+import java.io.IOException
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.*
-import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
-class AudioRecorderActivity: BaseActivity() {
+class AudioRecorderActivity: BaseActivity(), WaveformView.OnTouchListener {
 
     private lateinit var binding: ActivityAudioRecorderBinding
     private lateinit var viewModel: AudioRecorderViewModel
-    private lateinit var recordTimer: Timer
-    private lateinit var playTimer: Timer
-    private lateinit var audioFile: RandomAccessFile
     private val job = Job()
     private val coroutineScope = CoroutineScope(Dispatchers.Main + job)
-    private var player: StreamAudioPlayer? = null
-    private var recorder: StreamAudioRecorder? = null
+    private var player: StreamAudioPlayer = StreamAudioPlayer.getInstance()
+    private var recorder: AudioRecorder = AudioRecorder.getInstance()
+    private var audioFile: RandomAccessFile? = null
     private var buffer = ByteArray(BUFFER_SIZE)
+    private var bitDepth = BIT_DEPTH
+    private var channels = CHANNELS
+    private var sampleRate = SAMPLE_RATE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,23 +76,20 @@ class AudioRecorderActivity: BaseActivity() {
 
         setDisplayHomeAsUpEnabled(binding.toolbar)
         setOnHomePressedCallback { onBackPressed() }
-        updateUI(STOP_RECORDING)
-        binding.waveformView.registerSeekBar(binding.seekBar)
-        binding.waveformView.registerTimerTextView(binding.recordingTimeTimer)
-        binding.waveformView.setOnTouchActionDownCallback {
-            dragWhilePlaying()
-        }
+        updateState(INITIALIZED)
+        initSeekBar()
 
-        binding.waveformView.setOnTouchActionUpCallback {
-            resumePlaying()
-        }
+        binding.waveformView.setOnTouchListener(this)
+
+        val text = "00:00"
+        binding.elapsedTime.text = text
+        binding.totalTime.text = text
 
         binding.playPause.setOnClickListener {
             onPlay()
         }
 
         binding.recordPause.setOnClickListener {
-            showToast("STATE: ${viewModel.state}")
             onRecord()
         }
 
@@ -87,6 +103,11 @@ class AudioRecorderActivity: BaseActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        requestPermissions()
+    }
+
     private fun updateState(state: Int) {
         updateUI(state)
         viewModel.state = state
@@ -94,63 +115,68 @@ class AudioRecorderActivity: BaseActivity() {
 
     private fun updateUI(state: Int) {
         when(state) {
+            INITIALIZED -> {
+                binding.waveformView.isEnabled = true
+                binding.playPause.visibility = View.GONE
+                binding.stop.visibility = View.GONE
+            }
             PAUSE_PLAYING -> {
-                binding.playPause.scale(0.5F, 200L) {
+                binding.playPause.scale(0.5F, 100L) {
                     binding.playPause.setBackgroundResource(R.drawable.ic_round_play_arrow_24)
                     binding.playPause.setImageResource(android.R.color.transparent)
                     binding.playPause.scale(1F, 100L)
                 }
 
-                if (!binding.seekBar.isVisible)
-                    binding.seekBar.fadeIn(200) {  }
+                if (!binding.seekBarContainer.isVisible)
+                    binding.seekBarContainer.visibility = View.VISIBLE
                 binding.recordPause.isEnabled = true
             }
             PAUSE_RECORDING -> {
-                binding.recordPause.scale(0.5F, 200L) {
+                binding.recordPause.scale(0.5F, 100L) {
                     binding.recordPause.setBackgroundResource(R.drawable.ic_round_fiber_manual_record_24)
                     binding.recordPause.setImageResource(android.R.color.transparent)
                     binding.recordPause.scale(1F, 100L)
                 }
 
-                if (!binding.seekBar.isVisible)
-                    binding.seekBar.fadeIn(200) {  }
+                if (!binding.seekBarContainer.isVisible)
+                    binding.seekBarContainer.visibility = View.VISIBLE
                 binding.waveformView.isEnabled = true
                 binding.playPause.isEnabled = true
             }
             PLAY -> {
-                binding.playPause.scale(0.5F, 200L) {
+                binding.playPause.scale(0.5F, 100L) {
                     binding.playPause.setBackgroundResource(R.drawable.ic_round_pause_24)
                     binding.playPause.setImageResource(android.R.color.transparent)
                     binding.playPause.scale(1F, 100L)
                 }
 
-                if (!binding.seekBar.isVisible)
-                    binding.seekBar.fadeIn(200) {  }
+                if (!binding.seekBarContainer.isVisible)
+                    binding.seekBarContainer.visibility = View.VISIBLE
                 binding.recordPause.isEnabled = false
             }
             RECORD -> {
-                binding.playPause.scale(1F, 200L)
-                binding.stop.scale(1F, 200L)
-                binding.recordPause.scale(0.5F, 200L) {
+                binding.playPause.scale(1F, 100L)
+                binding.stop.scale(1F, 100L)
+                binding.recordPause.scale(0.5F, 100L) {
                     binding.recordPause.setBackgroundResource(R.drawable.ic_round_pause_24)
                     binding.recordPause.setImageResource(android.R.color.transparent)
                     binding.recordPause.scale(1F, 100L)
                 }
 
-                if (binding.seekBar.isVisible)
-                    binding.seekBar.fadeOut(200) {  }
+                if (binding.seekBarContainer.isVisible)
+                    binding.seekBarContainer.visibility = View.GONE
                 binding.waveformView.isEnabled = false
                 binding.playPause.isEnabled = false
             }
             STOP_PLAYING -> {
-                binding.playPause.scale(0.5F, 200L) {
+                binding.playPause.scale(0.5F, 100L) {
                     binding.playPause.setBackgroundResource(R.drawable.ic_round_play_arrow_24)
                     binding.playPause.setImageResource(android.R.color.transparent)
                     binding.playPause.scale(1F, 100L)
                 }
 
-                if (!binding.seekBar.isVisible)
-                    binding.seekBar.fadeIn(200) {  }
+                if (!binding.seekBarContainer.isVisible)
+                    binding.seekBarContainer.visibility = View.VISIBLE
                 binding.recordPause.isEnabled = true
             }
             STOP_RECORDING -> {
@@ -167,11 +193,13 @@ class AudioRecorderActivity: BaseActivity() {
             PAUSE_RECORDING -> startPlaying()
             PLAY -> pausePlaying()
             STOP_PLAYING -> startPlaying()
+            STOP_RECORDING -> startPlaying()
         }
     }
 
     private fun onRecord() {
         when (viewModel.state) {
+            INITIALIZED -> startRecording()
             PAUSE_RECORDING -> resumeRecording()
             PAUSE_PLAYING -> resumeRecording()
             RECORD -> pauseRecording()
@@ -183,83 +211,66 @@ class AudioRecorderActivity: BaseActivity() {
     @SuppressLint("CheckResult")
     private fun startPlaying() {
         updateState(PLAY)
-
+        binding.waveformView.updateState(WaveformView.State.PLAY)
         audioFile = RandomAccessFile(viewModel.audioFilePath, "rw")
-        player = StreamAudioPlayer.getInstance()
 
-        Observable.just(audioFile).subscribeOn(Schedulers.io()).subscribe { file ->
-            try {
-                player?.init()
-                binding.waveformView.setMode(WaveformView.Mode.PLAY)
+        Observable.just(audioFile).subscribeOn(Schedulers.io()).subscribe { randomAccessFile ->
+            randomAccessFile?.let { file ->
+                try {
+                    player.init(
+                        sampleRate, AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT, BUFFER_SIZE
+                    )
 
-                val frames = audioFile.length().toInt() / BUFFER_SIZE
-                val playedBytes = (frames * binding.waveformView.progressRate()).roundToInt() * BUFFER_SIZE
-                file.seek(playedBytes.toLong())
+                    var audioFileLength = audioFile?.length() ?: 44
+                    audioFileLength -= 44L
+                    val frameCount: Double = audioFileLength / BUFFER_SIZE.toDouble()
+                    val playedFrames = (frameCount * binding.waveformView.progressRate()).roundToLong()
+                    val playedBytes = playedFrames * BUFFER_SIZE
+                    file.seek(playedBytes)
 
-                var read: Int
-                var timerScheduled = false
-                while (file.read(buffer).also { read = it } > 0) {
-                    player?.play(buffer, read)
-
-                    if (!timerScheduled) {
-                        playTimer = Timer()
-                        playTimer.schedule(object : TimerTask() {
-                            override fun run() {
-                                coroutineScope.launch {
-                                    binding.waveformView.shiftPivot(1)
-                                    binding.recordingTimeTimer.text = binding.waveformView.time().toDateFormat(TIMER_PATTERN)
-
-                                    if (binding.waveformView.isPivotAtEnd())
-                                        playTimer.cancel()
-                                }
-                            }
-                        }, 0, UPDATE_INTERVAL_MILLISECONDS)
-
-                        timerScheduled = true
+                    var read: Int
+                    while (file.read(buffer).also { read = it } > 0) {
+                        player.play(buffer, read)
+                        coroutineScope.launch {
+                            binding.waveformView.shiftPivot(1)
+                            updateTimerText()
+                            binding.seekBar.updateProgress()
+                        }
                     }
-                }
 
-                file.close()
-                player?.release()
-                coroutineScope.launch {
-                    stopPlaying()
-                }
-            } catch (e: IOException) {
-                coroutineScope.launch {
-                    if (viewModel.state == PLAY) {
-                        showToast(getString(R.string.audio_player_playback_failure_message))
-                        playTimer.cancel()
+                    file.close()
+                    player.release()
+                    coroutineScope.launch {
                         stopPlaying()
                     }
-                }
+                } catch (e: IOException) {
+                    coroutineScope.launch {
+                        if (viewModel.state == PLAY) {
+                            showToast(getString(R.string.audio_player_playback_failure_message))
+                            stopPlaying()
+                        }
+                    }
 
-                playTimer.cancel()
-                file.close()
-                e.printStackTrace()
+                    e.printStackTrace()
+                }
             }
         }
     }
 
     private fun pausePlaying() {
         updateState(PAUSE_PLAYING)
-
-        if (::playTimer.isInitialized)
-            playTimer.cancel()
-        audioFile.close()
-        player?.release()
-
-        binding.waveformView.setMode(WaveformView.Mode.PAUSE_PLAYING)
+        binding.waveformView.updateState(WaveformView.State.PAUSE_PLAYING)
+        audioFile?.close()
+        audioFile = null
+        player.release()
     }
 
     private fun dragWhilePlaying() {
         viewModel.state = PAUSE_PLAYING
-
-        if (::playTimer.isInitialized)
-            playTimer.cancel()
-        audioFile.close()
-        player?.release()
-
-        binding.waveformView.setMode(WaveformView.Mode.DRAG_WHILE_PLAYING)
+        binding.waveformView.updateState(WaveformView.State.DRAG_WHILE_PLAYING)
+        audioFile?.close()
+        player.release()
     }
 
     private fun resumePlaying() {
@@ -268,130 +279,105 @@ class AudioRecorderActivity: BaseActivity() {
 
     private fun stopPlaying() {
         updateState(STOP_PLAYING)
-
-        audioFile.close()
-        player?.release()
-
-        binding.waveformView.setMode(WaveformView.Mode.STOP_PLAYING)
+        binding.waveformView.updateState(WaveformView.State.STOP_PLAYING)
+        audioFile?.close()
+        audioFile = null
+        player.release()
     }
 
     private fun startRecording() {
         updateState(RECORD)
-
-        var timerScheduled = false
-
+        binding.waveformView.updateState(WaveformView.State.RECORD)
         audioFile = RandomAccessFile(viewModel.audioFilePath, "rw")
-        recorder = StreamAudioRecorder.getInstance()
-        recorder?.start(object : StreamAudioRecorder.AudioDataCallback {
-            override fun onAudioData(data: ByteArray, size: Int) {
-                try {
-                    audioFile.write(data, 0, data.size)
-
-                    if (!timerScheduled) {
-                        binding.waveformView.setMode(WaveformView.Mode.RECORD)
-                        recordTimer = Timer()
-                        recordTimer.schedule(object : TimerTask() {
-                            override fun run() {
-                                updateWaveformView(data)
-                                binding.recordingTimeTimer.text = binding.waveformView.time().toDateFormat(TIMER_PATTERN)
-                            }
-                        }, 0, UPDATE_INTERVAL_MILLISECONDS)
-
-                        timerScheduled = true
+        writeWavHeader(channels.toShort(), sampleRate, bitDepth.toShort())
+        recorder.start(sampleRate, AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT, BUFFER_SIZE, object : AudioRecorder.AudioDataCallback {
+                override fun onAudioDataRecord(data: ByteArray, size: Int) {
+                    try {
+                        audioFile?.write(data, 0, data.size)
+                        coroutineScope.launch {
+                            updateWaveformView(data)
+                            updateTimerText()
+                        }
+                    } catch (e: IOException) {
+                        Timber.e(e)
+                        audioFile?.close()
                     }
-                } catch (e: IOException) {
-                    Timber.e(e)
-                    recordTimer.cancel()
-                    audioFile.close()
                 }
-            }
 
-            override fun onError() {
-                Timber.e("Audio recording failed.")
-                recordTimer.cancel()
-                audioFile.close()
-            }
-        })
+                override fun onError() {
+                    Timber.e("Audio recording failed.")
+                    audioFile?.close()
+                }
+            })
     }
 
     private fun pauseRecording() {
         updateState(PAUSE_RECORDING)
-
-        if (::recordTimer.isInitialized)
-            recordTimer.cancel()
-        audioFile.close()
-        recorder?.stop()
-
-        binding.waveformView.setMode(WaveformView.Mode.PAUSE_RECORDING)
-        binding.waveformView.invalidate()
+        binding.waveformView.updateState(WaveformView.State.PAUSE_RECORDING)
+        recorder.stop()
+        binding.seekBar.update()
+        binding.totalTime.text = binding.waveformView.time().toDateFormat(TIMESTAMP_PATTERN)
     }
 
     private fun resumeRecording() {
-        updateUI(RECORD)
-        viewModel.state = RECORD
-
-        var timerScheduled = false
-        var sought = false
-
+        updateState(RECORD)
+        binding.waveformView.updateState(WaveformView.State.OVERWRITE)
         audioFile = RandomAccessFile(viewModel.audioFilePath, "rw")
-        recorder = StreamAudioRecorder.getInstance()
-        recorder?.start(object : StreamAudioRecorder.AudioDataCallback {
-            override fun onAudioData(data: ByteArray, size: Int) {
-                try {
-                    if (!sought) {
-                        val frames = audioFile.length().toInt() / BUFFER_SIZE
-                        val playedBytes = (frames * binding.waveformView.progressRate()).roundToInt() * BUFFER_SIZE
-                        audioFile.seek(playedBytes.toLong())
-                        sought = true
+
+        var audioFileLength = audioFile?.length() ?: 44
+        audioFileLength -= 44L
+        val frameCount: Double = audioFileLength / BUFFER_SIZE.toDouble()
+        val playedFrames = (frameCount * binding.waveformView.progressRate()).roundToLong()
+        val playedBytes = playedFrames * BUFFER_SIZE
+        audioFile?.seek(playedBytes)
+
+        recorder.start(sampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            BUFFER_SIZE,
+            object : AudioRecorder.AudioDataCallback {
+                override fun onAudioDataRecord(data: ByteArray, size: Int) {
+                    try {
+                        audioFile?.write(data, 0, data.size)
+                        coroutineScope.launch {
+                            updateWaveformView(data)
+                            updateTimerText()
+                        }
+                    } catch (e: IOException) {
+                        Timber.e(e)
+                        audioFile?.close()
                     }
-
-                    audioFile.write(data, 0, data.size)
-
-                    if (!timerScheduled) {
-                        recordTimer = Timer()
-                        recordTimer.schedule(object : TimerTask() {
-                            override fun run() {
-                                updateWaveformView(data, true)
-                                binding.recordingTimeTimer.text = binding.waveformView.time().toDateFormat(TIMER_PATTERN)
-                            }
-                        }, 0, UPDATE_INTERVAL_MILLISECONDS)
-
-                        timerScheduled = true
-                    }
-                } catch(e: IOException) {
-                    Timber.e(e)
-                    recordTimer.cancel()
-                    audioFile.close()
                 }
-            }
 
-            override fun onError() {
-                Timber.e("Audio recording failed.")
-                recordTimer.cancel()
-                audioFile.close()
-            }
-        })
+                override fun onError() {
+                    Timber.e("Audio recording failed.")
+                    audioFile?.close()
+                }
+            })
     }
 
     private fun stopRecording() {
-        updateUI(STOP_RECORDING)
-        audioFile.close()
-        recorder?.stop()
+        updateState(STOP_RECORDING)
+        binding.waveformView.updateState(WaveformView.State.STOP_RECORDING)
+        updateWavHeader(File(viewModel.audioFilePath))
+        convertToM4a()
+        audioFile?.close()
+        audioFile = null
+        recorder.stop()
     }
 
-    private fun updateWaveformView(data: ByteArray, overwrite: Boolean = false) {
+    private fun updateWaveformView(data: ByteArray) {
         val shorts = ShortArray(data.size / 2)
         ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
         shorts.maxOrNull()?.let {
-            if (overwrite)
-                binding.waveformView.update(it.toInt(), WaveformView.Mode.OVERWRITE)
-            else
-                binding.waveformView.update(it.toInt(), WaveformView.Mode.RECORD)
+            binding.waveformView.update(it.toInt())
         }
     }
 
     private fun microphoneAvailable(context: Context): Boolean {
         val recorder = MediaRecorder()
+        recorder.maxAmplitude
         recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
         recorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT)
         recorder.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT)
@@ -408,33 +394,293 @@ class AudioRecorderActivity: BaseActivity() {
     }
 
     private fun requestPermissions() {
-        val permissionListener = object : PermissionListener {
-            override fun onPermissionGranted(response: PermissionGrantedResponse) {  }
-
-            override fun onPermissionDenied(response: PermissionDeniedResponse) {
-                finish()
-            }
-
-            override fun onPermissionRationaleShouldBeShown(
-                    permission: PermissionRequest?,
-                    token: PermissionToken?
-            ) {
-                token?.continuePermissionRequest()
-            }
-        }
-
         Dexter.withContext(this)
-                .withPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                .withListener(permissionListener)
-                .check()
+            .withPermissions(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ).withListener(object : MultiplePermissionsListener {
+                override fun onPermissionsChecked (report: MultiplePermissionsReport) {
+                    if (report.areAllPermissionsGranted())
+                        Timber.d("All permissions are granted.")
+                    else
+                        finish()
+                }
+
+                override fun onPermissionRationaleShouldBeShown (
+                    permissions: List<PermissionRequest>,
+                    token: PermissionToken
+                ) {
+                    token.continuePermissionRequest()
+                }
+            }).check()
+    }
+
+    private fun initSeekBar() {
+        binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    seekBar.updatePivot()
+                    if (binding.waveformView.getMode() == WaveformView.State.PLAY)
+                        dragWhilePlaying()
+                }
+
+                updateTimerText()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                if (binding.waveformView.getMode() == WaveformView.State.DRAG_WHILE_PLAYING) {
+                    if (!binding.waveformView.isPivotAtEnd())
+                        resumePlaying()
+                    else
+                        stopPlaying()
+                }
+            }
+        })
+    }
+
+    private fun updateTimerText() {
+        val time = binding.waveformView.time()
+        binding.timer.text = time.toDateFormat(TIMER_PATTERN)
+        binding.elapsedTime.text = time.toDateFormat(TIMESTAMP_PATTERN)
+    }
+
+    private fun SeekBar.updatePivot() {
+        if (this.max.isNotZero()) {
+            val pivot = (binding.waveformView.pulseCount().dec() * progressRate()).toInt()
+            binding.waveformView.setPivot(pivot)
+            binding.waveformView.invalidate()
+        }
+    }
+
+
+    private fun SeekBar.update() {
+        max = binding.waveformView.pulseCount().dec()
+        if (binding.waveformView.pulseCount().isNotZero())
+            progress = binding.waveformView.pivot()
+    }
+
+    private fun SeekBar.updateProgress() {
+        if (binding.waveformView.pulseCount().isNotZero())
+            progress = binding.waveformView.pivot()
+    }
+
+    override fun onBackPressed() {
+        when(viewModel.state) {
+            PLAY -> pausePlaying()
+            RECORD -> pauseRecording()
+        }
+        // showAudioFileNameInputDialog()
+        super.onBackPressed()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        showToast("this not called?")
+        showRecordingNotification()
+    }
+
+    private fun showSaveConfirmationDialog() {
+
+    }
+
+    private fun showRecordingNotification() {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            createNotificationChannel(notificationManager, CHANNEL_ID, CHANNEL_NAME)
+
+        val remoteViewsSmall = RemoteViews(packageName, R.layout.layout_recording_notification)
+        remoteViewsSmall.setOnClickPendingIntent(
+            R.id.btn_recording_stop1, getPendingSelfIntent(
+                applicationContext,
+                ACTION_STOP_RECORDING
+            )
+        )
+        remoteViewsSmall.setOnClickPendingIntent(
+            R.id.btn_recording_pause, getPendingSelfIntent(
+                applicationContext,
+                ACTION_PAUSE_RECORDING
+            )
+        )
+        remoteViewsSmall.setTextViewText(R.id.txt_recording_progress, "test")
+        remoteViewsSmall.setInt(R.id.container, "setBackgroundColor", Color.BLACK)
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        builder.setWhen(System.currentTimeMillis())
+        builder.setSmallIcon(R.drawable.ic_round_play_arrow_24)
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+            builder.priority = NotificationManager.IMPORTANCE_MAX
+        else
+            builder.priority = Notification.PRIORITY_MAX
+
+        builder.setContentIntent(createContentIntent())
+        builder.setCustomContentView(remoteViewsSmall)
+        builder.setOnlyAlertOnce(true)
+        builder.setDefaults(0)
+        builder.setSound(null)
+
+        notificationManager.notify(0, builder.build())
+    }
+
+    private fun createContentIntent(): PendingIntent? {
+        val intent = Intent(applicationContext, AudioRecorderActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP
+        return PendingIntent.getActivity(applicationContext, 0, intent, 0)
+    }
+
+    @Suppress("SameParameterValue")
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun createNotificationChannel(
+        notificationManager: NotificationManager,
+        id: String,
+        name: String
+    ): String? {
+        notificationManager.getNotificationChannel(id)?.let {
+            val notificationChannel = NotificationChannel(
+                id,
+                name,
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationChannel.lightColor = Color.BLUE
+            notificationChannel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            notificationChannel.setSound(null, null)
+            notificationChannel.enableLights(false)
+            notificationChannel.enableVibration(false)
+            notificationManager.createNotificationChannel(notificationChannel)
+            return id
+        } ?: return null
+    }
+
+    private fun convertToM4a() {
+        @Suppress("SpellCheckingInspection")
+        val ffmpeg = FFmpeg.getInstance(this)
+        try {
+            val cmd = arrayOf(
+                "-i", viewModel.audioFilePath, viewModel.audioFilePath.replace(
+                    ".wav",
+                    ".m4a"
+                )
+            )
+            ffmpeg.execute(cmd, object : ExecuteBinaryResponseHandler() {
+                override fun onStart() {  }
+                override fun onProgress(message: String) {}
+                override fun onFailure(message: String) { Timber.e("Failed to convert to m4a.: $message") }
+                override fun onSuccess(message: String) {  deleteAudioFile() }
+                override fun onFinish() {  }
+            })
+        } catch (e: FFmpegCommandAlreadyRunningException) {
+            Timber.e(e)
+        }
+    }
+
+    private fun deleteAudioFile() {
+        val audioFile = File(viewModel.audioFilePath)
+        if (audioFile.exists())
+            audioFile.delete()
     }
 
     companion object {
+        const val INITIALIZED = -1
         const val PAUSE_PLAYING = 0
         const val PAUSE_RECORDING = 1
         const val PLAY = 2
         const val RECORD = 3
         const val STOP_PLAYING = 4
         const val STOP_RECORDING = 5
+
+        const val ACTION_STOP_RECORDING = "com.duke.elliot.opicdi.audio_recoder.action_stop_recording"
+        const val ACTION_PAUSE_RECORDING = "com.duke.elliot.opicdi.audio_recoder.action_pause_recording"
+
+        const val RECORDING_NOTIFICATION_ID = 224
+
+        private const val CHANNEL_ID = "default"
+        private const val CHANNEL_NAME = "com.duke.elliot.opicdi.audio_recoder.channel_name"
+    }
+
+
+    private fun getPendingSelfIntent(context: Context?, action: String?): PendingIntent {
+        val intent = Intent(context, RecordingReceiver::class.java)
+        intent.action = action
+        return PendingIntent.getBroadcast(context, 10, intent, 0)
+    }
+
+    override fun onTouchActionDown() {
+        dragWhilePlaying()
+    }
+
+    override fun onTouchActionMove() {
+        updateTimerText()
+        binding.seekBar.updateProgress()
+    }
+
+    override fun onTouchActionUp() {
+        if (!binding.waveformView.isPivotAtEnd())
+            resumePlaying()
+        else
+            stopPlaying()
+    }
+
+    class RecordingReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+
+        }
+    }
+
+    private fun updateWavHeader(wavFile: File) {
+        val byteBuffer = ByteBuffer
+                .allocate(8)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt((wavFile.length() - 8).toInt())
+                .putInt((wavFile.length() - 44).toInt())
+                .array()
+
+        val randomAccessWavFile = RandomAccessFile(wavFile, "rw")
+        try {
+            randomAccessWavFile.seek(4)
+            randomAccessWavFile.write(byteBuffer, 0, 4)
+            randomAccessWavFile.seek(40)
+            randomAccessWavFile.write(byteBuffer, 4, 4)
+
+        } catch (e: IOException) {
+            throw e
+        } finally {
+            try {
+                randomAccessWavFile.close()
+            } catch (e: IOException) {
+
+            }
+        }
+    }
+
+    private fun writeWavHeader(channels: Short, sampleRate: Int, bitDepth: Short) {
+        val wavHeader = ByteBuffer
+                .allocate(14)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putShort(channels)
+                .putInt(sampleRate)
+                .putInt(sampleRate * channels * (bitDepth / 8))
+                .putShort((channels * (bitDepth / 8)).toShort())
+                .putShort(bitDepth)
+                .array()
+        audioFile?.write(
+            byteArrayOf(
+                'R'.toByte(), 'I'.toByte(), 'F'.toByte(), 'F'.toByte(), // Chunk ID
+                0, 0, 0, 0, // Chunk Size
+                'W'.toByte(), 'A'.toByte(), 'V'.toByte(), 'E'.toByte(), // Format
+                'f'.toByte(), 'm'.toByte(), 't'.toByte(), ' '.toByte(), // Sub-chunk1 ID
+                16, 0, 0, 0, // Sub-chunk1 Size
+                1, 0, // Audio Format
+                wavHeader[0], wavHeader[1], // Num Channels
+                wavHeader[2], wavHeader[3], wavHeader[4], wavHeader[5], // Sample Rate
+                wavHeader[6], wavHeader[7], wavHeader[8], wavHeader[9], // Byte Rate
+                wavHeader[10], wavHeader[11], // Block Align
+                wavHeader[12], wavHeader[13], // Bits Per Sample
+                'd'.toByte(), 'a'.toByte(), 't'.toByte(), 'a'.toByte(), // Sub-chunk2 ID
+                0, 0, 0, 0 // // Sub-chunk2 Size
+            )
+        )
     }
 }

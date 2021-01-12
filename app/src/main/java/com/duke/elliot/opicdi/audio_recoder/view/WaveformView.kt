@@ -6,56 +6,48 @@ import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import android.widget.SeekBar
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.duke.elliot.opicdi.R
 import com.duke.elliot.opicdi.audio_recoder.*
-import com.duke.elliot.opicdi.util.isNotZero
 import com.duke.elliot.opicdi.util.toDateFormat
 import com.duke.elliot.opicdi.util.toPx
 import java.util.*
 
 class WaveformView : View {
-    enum class Mode {
-        RECORD,
-        PLAY,
-        PAUSE_RECORDING,
+    enum class State {
+        INITIALIZED,
         PAUSE_PLAYING,
+        PAUSE_RECORDING,
+        PLAY,
+        RECORD,
         STOP_PLAYING,
         STOP_RECORDING,
         DRAG_WHILE_PLAYING,
         OVERWRITE,
     }
 
-    private var mode = Mode.RECORD
+    private var state = State.INITIALIZED
 
-    private var seekBar: SeekBar? = null
-    private var allowOnProgressChanged = true
+    private var allowDragWhilePlaying = false
 
-    private var timerTextView: TextView? = null
-    fun registerTimerTextView(timerTextView: TextView) {
-        this.timerTextView = timerTextView
+    private var onTouchListener: OnTouchListener? = null
+    fun setOnTouchListener(onTouchListener: OnTouchListener) {
+        this.onTouchListener = onTouchListener
     }
-
-    private var onTouchActionDownCallback: ((WaveformView) -> Unit)? = null
-    private var allowOnTouchCallback = true
-    fun setOnTouchActionDownCallback(onTouchActionDownCallback: (WaveformView) -> Unit) {
-        this.onTouchActionDownCallback = onTouchActionDownCallback
-    }
-
-    private var onTouchActionUpCallback: ((WaveformView) -> Unit)? = null
-    fun setOnTouchActionUpCallback(onTouchActionUpCallback: (WaveformView) -> Unit) {
-        this.onTouchActionUpCallback = onTouchActionUpCallback
+    interface OnTouchListener {
+        fun onTouchActionDown()
+        fun onTouchActionMove()
+        fun onTouchActionUp()
     }
 
     private var pivot = 0
 
     private var measured = false
     private var startX = 0F
+    private var previousDx = 0F
 
-    private var maximumVisiblePulseCount = 0F
-    private var halfMaximumVisiblePulseCount = 0F
+    private var maxVisiblePulseCount = 0F
+    private var halfMaxVisiblePulseCount = 0F
 
     private var viewWidth = 0F
     private var halfViewWidth = 0
@@ -101,7 +93,7 @@ class WaveformView : View {
 
     private val timestampPaint = TextPaint()
     private val timestampBottomPadding = 8.toPx()
-    private val timestampInterval = (TIMESTAMP_INTERVAL_MILLISECONDS / UPDATE_INTERVAL_MILLISECONDS).toInt()
+    private val timestampInterval = (TIMESTAMP_INTERVAL_MILLISECONDS / VISUALIZER_UPDATE_INTERVAL_MILLISECONDS).toInt()
     private var timestampTextColor = Color.WHITE
     private var timestampTextSize = context.resources.getDimension(R.dimen.text_size_small)
     private var textHeight = 0F
@@ -146,8 +138,8 @@ class WaveformView : View {
         halfViewWidth = width / 2
 
         pulseHorizontalScale = pulseWidth + pulseSpacing
-        maximumVisiblePulseCount = viewWidth / pulseHorizontalScale
-        halfMaximumVisiblePulseCount = maximumVisiblePulseCount / 2
+        maxVisiblePulseCount = viewWidth / pulseHorizontalScale
+        halfMaxVisiblePulseCount = maxVisiblePulseCount / 2
 
         setMeasuredDimension(
                 resolveSize(width, widthMeasureSpec),
@@ -161,22 +153,16 @@ class WaveformView : View {
         invalidate()
     }
 
-    fun update(amplitude: Int, mode: Mode) {
-        if (mode == Mode.OVERWRITE && mode != this.mode)
-            overwriteStart = pivot
-
-        this.mode = mode
-
-        if (mode == Mode.RECORD)
+    fun update(amplitude: Int) {
+        if (state == State.RECORD)
             add(amplitude)
-        else if (mode == Mode.OVERWRITE)
+        else if (state == State.OVERWRITE)
             overwrite(amplitude)
     }
 
     private fun add(amplitude: Int) {
         amplitudes.add(amplitudes.size, adjustAmplitude(amplitude))
         pivot = amplitudes.size.dec()
-        updateSeekBar()
         invalidate()
     }
 
@@ -195,7 +181,6 @@ class WaveformView : View {
         }
 
         overwrittenAmplitudes.add(overwrittenAmplitudes.size, adjustedAmplitude)
-        updateSeekBar()
         invalidate()
     }
 
@@ -280,34 +265,33 @@ class WaveformView : View {
             }
         }
 
-        setOnTouchListener { _, motionEvent ->
-            when (motionEvent.action and MotionEvent.ACTION_MASK) {
+        setOnTouchListener { _, event ->
+            when (event.action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_DOWN -> {
-                    startX = motionEvent.x
-                    allowOnProgressChanged = false
+                    startX = event.x
+                    previousDx = 0F
 
-                    if (allowOnTouchCallback)
-                        onTouchActionDownCallback?.invoke(this)
+                    if (allowDragWhilePlaying)
+                        onTouchListener?.onTouchActionDown()
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (motionEvent.x - startX)
-                    pivot -= (dx / pulseHorizontalScale).toInt() / 8 // 피벗 레인지 지정.
+                    var dx = event.x - startX
+                    if (previousDx == 0F)
+                        previousDx = dx
+                    else {
+                        val t = dx
+                        dx -= previousDx
+                        previousDx = t
+                    }
 
-                    if (pivot < 0)
-                        pivot = 0
-                    else if (pivot > amplitudes.size.dec())
-                        pivot = amplitudes.size.dec()
-
-                    updateSeekBarProgress()
-                    updateTimerText()
-                    invalidate()
+                    val shift = -(dx / pulseHorizontalScale).toInt()
+                    shiftPivot(shift)
+                    onTouchListener?.onTouchActionMove()
                 }
-                MotionEvent.ACTION_UP -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     performClick()
-                    allowOnProgressChanged = true
-
-                    if (allowOnTouchCallback)
-                        onTouchActionUpCallback?.invoke(this)
+                    if (allowDragWhilePlaying)
+                        onTouchListener?.onTouchActionUp()
                 }
             }
             true
@@ -336,7 +320,7 @@ class WaveformView : View {
         if (pulseSmoothTransition) {
             val scaleFactor = calculateScaleFactor()
 
-            if (mode == Mode.OVERWRITE && overwrittenAmplitudes.isNotEmpty()) {
+            if (state == State.OVERWRITE && overwrittenAmplitudes.isNotEmpty()) {
                 val prevFftWithoutAdditionalSize = overwrittenAmplitudes[overwrittenAmplitudes.size.dec()] - minimumAmplitude
                 amplitudePoint = amplitudePoint.smoothTransition(prevFftWithoutAdditionalSize, 2.2F, scaleFactor)
             } else if (amplitudes.isNotEmpty()) {
@@ -356,7 +340,7 @@ class WaveformView : View {
     }
 
     private fun calculateScaleFactor(): Float {
-        return when (UPDATE_INTERVAL_MILLISECONDS) {
+        return when (VISUALIZER_UPDATE_INTERVAL_MILLISECONDS) {
             in 0..50 -> 1.6F
             in 50..100 -> 2.2F
             in 100..150 -> 2.8F
@@ -373,8 +357,8 @@ class WaveformView : View {
 
         val verticalCenter = (height + textHeight) / 2
 
-        var range = if (pivot > halfMaximumVisiblePulseCount)
-            halfMaximumVisiblePulseCount.toInt()
+        var range = if (pivot > halfMaxVisiblePulseCount)
+            halfMaxVisiblePulseCount.toInt()
         else
             pivot
 
@@ -384,7 +368,9 @@ class WaveformView : View {
             val startY = verticalCenter - amplitudes[index] / 2
             val stopY = verticalCenter + amplitudes[index] / 2
 
-            if (mode == Mode.OVERWRITE && index >= overwriteStart)
+            if (state == State.OVERWRITE)
+                println("WHY???????????")
+            if (state == State.OVERWRITE && index > overwriteStart)
                 pulsePaint.color = overwrittenPulseColor
             else
                 pulsePaint.color = pulseColor
@@ -400,8 +386,8 @@ class WaveformView : View {
         if (pivot < amplitudes.size.dec()) {
             pulsePaint.color = pulseColor
 
-            range = if (amplitudes.size - pivot > halfMaximumVisiblePulseCount)
-                halfMaximumVisiblePulseCount.toInt()
+            range = if (amplitudes.size - pivot > halfMaxVisiblePulseCount)
+                halfMaxVisiblePulseCount.toInt()
             else
                 amplitudes.size - pivot
 
@@ -426,10 +412,10 @@ class WaveformView : View {
     private fun drawGridsAndTimestamps(canvas: Canvas) {
         drawTimestampBackgroundColor(canvas)
 
-        var start = pivot - maximumVisiblePulseCount.toInt()
+        var start = pivot - maxVisiblePulseCount.toInt()
         if (start < 0)
             start = 0
-        val end = pivot + maximumVisiblePulseCount.toInt()
+        val end = pivot + maxVisiblePulseCount.toInt()
         val subGridInterval = timestampInterval / subGridCount.inc() * pulseHorizontalScale
 
         for (i in start..end) {
@@ -439,7 +425,7 @@ class WaveformView : View {
                 else
                     halfViewWidth + (i - pivot) * pulseHorizontalScale
                 canvas.drawText(
-                        (i * UPDATE_INTERVAL_MILLISECONDS).toTimestampString(),
+                        (i * VISUALIZER_UPDATE_INTERVAL_MILLISECONDS).toTimestampString(),
                         x,
                         textHeight,
                         timestampPaint
@@ -471,116 +457,74 @@ class WaveformView : View {
         }
     }
 
-    fun registerSeekBar(seekBar: SeekBar) {
-        this.seekBar = seekBar
-        this.seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    if (allowOnProgressChanged) {
-                        seekBar.let {
-                            it.updatePivot()
-                            if (pivot >= amplitudes.size)
-                                pivot = amplitudes.size.dec()
-                            updateTimerText()
-                            invalidate()
-                        }
+    fun updateState(state: State) {
+        this.state = state
 
-                        if (allowOnTouchCallback)
-                            onTouchActionDownCallback?.invoke(this@WaveformView)
-                    }
-                }
+        when(state) {
+            State.INITIALIZED -> {
+                allowDragWhilePlaying = false
             }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                if (allowOnTouchCallback)
-                    onTouchActionUpCallback?.invoke(this@WaveformView)
+            State.PAUSE_PLAYING -> {
+                allowDragWhilePlaying = false
             }
-        })
-    }
-
-    private fun SeekBar.updatePivot() {
-        if (this.max.isNotZero())
-            pivot = (this.progress * amplitudes.size / this.max.toFloat()).toInt()
-    }
-
-    private fun updateSeekBar() {
-        seekBar?.let {
-            it.max = amplitudes.size
-            if (amplitudes.isNotEmpty())
-                it.progress = pivot
-        }
-    }
-
-    private fun updateSeekBarProgress() {
-        seekBar?.let {
-            if (amplitudes.isNotEmpty())
-                it.progress = pivot
-        }
-    }
-
-    fun setMode(mode: Mode) {
-        this.mode = mode
-
-        when(mode) {
-            Mode.PAUSE_PLAYING -> {
-                allowOnProgressChanged = true
-                allowOnTouchCallback = false
-                updateSeekBar()
-            }
-            Mode.PAUSE_RECORDING -> {
-                allowOnProgressChanged = true
+            State.PAUSE_RECORDING -> {
+                allowDragWhilePlaying = false
                 overwriteStart = 0
                 overwrittenAmplitudes.clear()
-                updateSeekBar()
             }
-            Mode.PLAY -> {
-                allowOnTouchCallback = true
+            State.PLAY -> {
+                allowDragWhilePlaying = true
                 if (pivot >= amplitudes.size.dec())
                     pivot = 0
             }
-            Mode.STOP_PLAYING -> {
-                allowOnProgressChanged = true
-                allowOnTouchCallback = false
-                updateSeekBar()
+            State.RECORD -> {
+                allowDragWhilePlaying = false
             }
-            Mode.STOP_RECORDING -> {
-                allowOnProgressChanged = true
+            State.STOP_PLAYING -> {
+                allowDragWhilePlaying = false
+            }
+            State.STOP_RECORDING -> {
                 overwriteStart = 0
                 overwrittenAmplitudes.clear()
-                updateSeekBar()
             }
-            Mode.DRAG_WHILE_PLAYING -> {
-                allowOnTouchCallback = true
+            State.DRAG_WHILE_PLAYING -> {
+                allowDragWhilePlaying = true
             }
-            else -> {
-                allowOnTouchCallback = false
+            State.OVERWRITE -> {
+                overwriteStart = pivot
+                allowDragWhilePlaying = false
             }
         }
     }
 
-    fun progressRate(): Float {
-        return if (pivot == 0)
-            0F
-        else
-            pivot / amplitudes.count().toFloat()
+    fun getMode() = state
+
+    fun progressRate(): Double = pivot.toDouble() / amplitudes.size.dec()
+
+    fun pivot() = pivot
+
+    fun setPivot(pivot: Int) {
+        this.pivot = pivot
+
+        if (pivot < 0)
+            this.pivot = 0
+        else if (pivot > amplitudes.size.dec())
+            this.pivot = amplitudes.size.dec()
+
+        invalidate()
     }
 
     fun shiftPivot(shift: Int) {
         pivot += shift
         if (pivot < 0)
-            pivot = 0
+            this.pivot = 0
         else if (pivot > amplitudes.size.dec())
-            pivot = amplitudes.size.dec()
+            this.pivot = amplitudes.size.dec()
 
-        updateSeekBar()
         invalidate()
     }
 
-    private fun updateTimerText() {
-        timerTextView?.text = (pivot * UPDATE_INTERVAL_MILLISECONDS).toDateFormat(TIMER_PATTERN)
-    }
+    fun pulseCount() = amplitudes.count()
 
     fun isPivotAtEnd() = pivot >= amplitudes.size.dec()
 
@@ -589,7 +533,7 @@ class WaveformView : View {
         canvas.drawRect(rect, timestampBackgroundPaint)
     }
 
-    fun time() = pivot * UPDATE_INTERVAL_MILLISECONDS
+    fun time() = pivot * VISUALIZER_UPDATE_INTERVAL_MILLISECONDS
 
     private fun Long.toTimestampString(): String {
         return this.toDateFormat(TIMESTAMP_PATTERN)

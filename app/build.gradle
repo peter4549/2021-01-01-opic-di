@@ -78,4 +78,7 @@ dependencies {
     // RxAndroidAudio
     implementation 'com.github.piasy:rxandroidaudio:1.6.0'
     implementation 'com.github.piasy:AudioProcessor:1.6.0'
+
+    // FFmpeg-Android-JAVA
+    implementation 'com.writingminds:FFmpegAndroid:0.3.2'
 }
