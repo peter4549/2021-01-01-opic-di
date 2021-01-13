@@ -368,9 +368,7 @@ class WaveformView : View {
             val startY = verticalCenter - amplitudes[index] / 2
             val stopY = verticalCenter + amplitudes[index] / 2
 
-            if (state == State.OVERWRITE)
-                println("WHY???????????")
-            if (state == State.OVERWRITE && index > overwriteStart)
+            if (state == State.OVERWRITE && index >= overwriteStart)
                 pulsePaint.color = overwrittenPulseColor
             else
                 pulsePaint.color = pulseColor
@@ -533,7 +531,8 @@ class WaveformView : View {
         canvas.drawRect(rect, timestampBackgroundPaint)
     }
 
-    fun time() = pivot * VISUALIZER_UPDATE_INTERVAL_MILLISECONDS
+    fun elapsedTime() = pivot * VISUALIZER_UPDATE_INTERVAL_MILLISECONDS
+    fun totalTime() = amplitudes.size.dec() * VISUALIZER_UPDATE_INTERVAL_MILLISECONDS
 
     private fun Long.toTimestampString(): String {
         return this.toDateFormat(TIMESTAMP_PATTERN)

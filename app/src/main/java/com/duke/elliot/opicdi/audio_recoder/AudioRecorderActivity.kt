@@ -12,6 +12,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.media.AudioFormat
 import android.media.MediaRecorder
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -26,10 +27,7 @@ import com.duke.elliot.opicdi.R
 import com.duke.elliot.opicdi.audio_recoder.view.WaveformView
 import com.duke.elliot.opicdi.base.BaseActivity
 import com.duke.elliot.opicdi.databinding.ActivityAudioRecorderBinding
-import com.duke.elliot.opicdi.util.isNotZero
-import com.duke.elliot.opicdi.util.progressRate
-import com.duke.elliot.opicdi.util.scale
-import com.duke.elliot.opicdi.util.toDateFormat
+import com.duke.elliot.opicdi.util.*
 import com.github.hiteshsondhi88.libffmpeg.ExecuteBinaryResponseHandler
 import com.github.hiteshsondhi88.libffmpeg.FFmpeg
 import com.github.hiteshsondhi88.libffmpeg.exceptions.FFmpegCommandAlreadyRunningException
@@ -317,7 +315,7 @@ class AudioRecorderActivity: BaseActivity(), WaveformView.OnTouchListener {
         binding.waveformView.updateState(WaveformView.State.PAUSE_RECORDING)
         recorder.stop()
         binding.seekBar.update()
-        binding.totalTime.text = binding.waveformView.time().toDateFormat(TIMESTAMP_PATTERN)
+        binding.totalTime.text = binding.waveformView.totalTime().toDateFormat(TIMESTAMP_PATTERN)
     }
 
     private fun resumeRecording() {
@@ -441,7 +439,7 @@ class AudioRecorderActivity: BaseActivity(), WaveformView.OnTouchListener {
     }
 
     private fun updateTimerText() {
-        val time = binding.waveformView.time()
+        val time = binding.waveformView.elapsedTime()
         binding.timer.text = time.toDateFormat(TIMER_PATTERN)
         binding.elapsedTime.text = time.toDateFormat(TIMESTAMP_PATTERN)
     }
@@ -558,28 +556,27 @@ class AudioRecorderActivity: BaseActivity(), WaveformView.OnTouchListener {
         @Suppress("SpellCheckingInspection")
         val ffmpeg = FFmpeg.getInstance(this)
         try {
-            val cmd = arrayOf(
-                "-i", viewModel.audioFilePath, viewModel.audioFilePath.replace(
-                    ".wav",
-                    ".m4a"
-                )
-            )
+            // TODO: Change file name.
+            val audioFilePath = viewModel.audioFilePath.substringBeforeLast(".")
+            val m4aAudioFilePath = "$audioFilePath.m4a"
+            val cmd = arrayOf("-i", viewModel.audioFilePath, m4aAudioFilePath)
             ffmpeg.execute(cmd, object : ExecuteBinaryResponseHandler() {
                 override fun onStart() {  }
-                override fun onProgress(message: String) {}
+                override fun onProgress(message: String) {  }
                 override fun onFailure(message: String) { Timber.e("Failed to convert to m4a.: $message") }
-                override fun onSuccess(message: String) {  deleteAudioFile() }
+                override fun onSuccess(message: String) {
+                    viewModel.deleteFile(viewModel.audioFilePath)
+                    if (viewModel.moveAudioFileToExternalStorage(m4aAudioFilePath)) {
+                        Timber.d("")
+                        showToast("외부저장소이동성성공공.")
+                    } else
+                        showToast("외부저장소이동실패.")
+                }
                 override fun onFinish() {  }
             })
         } catch (e: FFmpegCommandAlreadyRunningException) {
             Timber.e(e)
         }
-    }
-
-    private fun deleteAudioFile() {
-        val audioFile = File(viewModel.audioFilePath)
-        if (audioFile.exists())
-            audioFile.delete()
     }
 
     companion object {
