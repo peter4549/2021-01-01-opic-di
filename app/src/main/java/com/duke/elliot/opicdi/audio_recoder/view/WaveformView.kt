@@ -18,22 +18,27 @@ class WaveformView : View {
         INITIALIZED,
         PAUSE_PLAYING,
         PAUSE_RECORDING,
-        PLAY,
-        RECORD,
-        STOP_PLAYING,
+        PLAYING,
+        RECORDING,
+        STOP_PLAYBACK,
         STOP_RECORDING,
         DRAG_WHILE_PLAYING,
-        OVERWRITE,
+        OVERWRITING,
     }
 
     private var state = State.INITIALIZED
-
     private var allowDragWhilePlaying = false
+
+    fun isRecording() = state == State.RECORDING
+    fun isPlaying() = state == State.PLAYING
+    fun isOverwriting() = state == State.OVERWRITING
+    fun isDraggingWhilePlaying() = state == State.DRAG_WHILE_PLAYING
 
     private var onTouchListener: OnTouchListener? = null
     fun setOnTouchListener(onTouchListener: OnTouchListener) {
         this.onTouchListener = onTouchListener
     }
+
     interface OnTouchListener {
         fun onTouchActionDown()
         fun onTouchActionMove()
@@ -52,7 +57,7 @@ class WaveformView : View {
     private var viewWidth = 0F
     private var halfViewWidth = 0
 
-    private val maximumReportableAmplitude = 22760F  // Effective size, maximum amplitude: 32760F
+    private val maxReportableAmplitude = 22760F  // Effective size, maximum amplitude: 32760F
     private val uninitialized = 0F
     private var topBottomPadding = 8.toPx()
 
@@ -154,9 +159,9 @@ class WaveformView : View {
     }
 
     fun update(amplitude: Int) {
-        if (state == State.RECORD)
+        if (state == State.RECORDING)
             add(amplitude)
-        else if (state == State.OVERWRITE)
+        else if (state == State.OVERWRITING)
             overwrite(amplitude)
     }
 
@@ -311,7 +316,7 @@ class WaveformView : View {
         if (verticalDrawScale == 0F)
             return minimumAmplitude
 
-        val point = maximumReportableAmplitude / verticalDrawScale
+        val point = maxReportableAmplitude / verticalDrawScale
         if (point == 0F)
             return minimumAmplitude
 
@@ -320,7 +325,7 @@ class WaveformView : View {
         if (pulseSmoothTransition) {
             val scaleFactor = calculateScaleFactor()
 
-            if (state == State.OVERWRITE && overwrittenAmplitudes.isNotEmpty()) {
+            if (state == State.OVERWRITING && overwrittenAmplitudes.isNotEmpty()) {
                 val prevFftWithoutAdditionalSize = overwrittenAmplitudes[overwrittenAmplitudes.size.dec()] - minimumAmplitude
                 amplitudePoint = amplitudePoint.smoothTransition(prevFftWithoutAdditionalSize, 2.2F, scaleFactor)
             } else if (amplitudes.isNotEmpty()) {
@@ -368,7 +373,7 @@ class WaveformView : View {
             val startY = verticalCenter - amplitudes[index] / 2
             val stopY = verticalCenter + amplitudes[index] / 2
 
-            if (state == State.OVERWRITE && index >= overwriteStart)
+            if (state == State.OVERWRITING && index >= overwriteStart)
                 pulsePaint.color = overwrittenPulseColor
             else
                 pulsePaint.color = pulseColor
@@ -470,15 +475,15 @@ class WaveformView : View {
                 overwriteStart = 0
                 overwrittenAmplitudes.clear()
             }
-            State.PLAY -> {
+            State.PLAYING -> {
                 allowDragWhilePlaying = true
                 if (pivot >= amplitudes.size.dec())
                     pivot = 0
             }
-            State.RECORD -> {
+            State.RECORDING -> {
                 allowDragWhilePlaying = false
             }
-            State.STOP_PLAYING -> {
+            State.STOP_PLAYBACK -> {
                 allowDragWhilePlaying = false
             }
             State.STOP_RECORDING -> {
@@ -488,14 +493,12 @@ class WaveformView : View {
             State.DRAG_WHILE_PLAYING -> {
                 allowDragWhilePlaying = true
             }
-            State.OVERWRITE -> {
+            State.OVERWRITING -> {
                 overwriteStart = pivot
                 allowDragWhilePlaying = false
             }
         }
     }
-
-    fun getMode() = state
 
     fun progressRate(): Double = pivot.toDouble() / amplitudes.size.dec()
 

@@ -1,10 +1,12 @@
 package com.duke.elliot.opicdi.script
 
+import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.GravityCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
@@ -12,14 +14,14 @@ import androidx.navigation.fragment.navArgs
 import com.duke.elliot.opicdi.R
 import com.duke.elliot.opicdi.audio_recoder.AudioRecorderActivity
 import com.duke.elliot.opicdi.base.BaseFragment
-import com.duke.elliot.opicdi.database.Script
 import com.duke.elliot.opicdi.databinding.FragmentScriptWritingDrawerBinding
-import com.duke.elliot.opicdi.main.ScriptsViewModelFactory
+import com.duke.elliot.opicdi.script.audio.AudioFileAdapter
 
 class ScriptWritingFragment: BaseFragment() {
 
     private lateinit var binding: FragmentScriptWritingDrawerBinding
     private lateinit var viewModel: ScriptWritingViewModel
+    private lateinit var audioFileAdapter: AudioFileAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -32,7 +34,15 @@ class ScriptWritingFragment: BaseFragment() {
         val viewModelFactory = ScriptWritingViewModelFactory(requireActivity().application, originalScript)
         viewModel = ViewModelProvider(viewModelStore, viewModelFactory)[ScriptWritingViewModel::class.java]
 
-        setDisplayHomeAsUpEnabled(binding.toolbar)
+
+
+        binding.recyclerViewAudioFile.apply {
+            audioFileAdapter = AudioFileAdapter()
+            adapter = audioFileAdapter
+        }
+        audioFileAdapter.submitAudioFilePaths(viewModel.audioFilePaths)
+
+        setDisplayHomeAsUpEnabled(binding.fragmentScriptWriting.toolbar)
         setOnHomePressedCallback {
             findNavController().popBackStack()
         }
@@ -54,11 +64,33 @@ class ScriptWritingFragment: BaseFragment() {
         binding.fragmentScriptWriting.audioFiles.setOnClickListener {
             // TODO: Must be changed.
             val intent = Intent(requireContext(), AudioRecorderActivity::class.java)
-            startActivity(intent)
-            // findNavController().navigate(ScriptWritingFragmentDirections.actionScriptWritingFragmentToAudioRecorderFragment())
+            startActivityForResult(intent, REQUEST_CODE_AUDIO_RECORDER)
         }
-        binding.fragmentScriptWriting.save.setOnClickListener {
 
+        binding.fragmentScriptWriting.save.setOnClickListener {
+            // TODO: Change.
+            // check drawer action.
+            if (binding.drawerLayout.isDrawerOpen(GravityCompat.END))
+                binding.drawerLayout.closeDrawer(GravityCompat.END, true)
+            else
+                binding.drawerLayout.openDrawer(GravityCompat.END, true)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (resultCode == RESULT_OK) {
+            when(requestCode) {
+                REQUEST_CODE_AUDIO_RECORDER -> {
+                    /** Add Audio Meta data.*/
+                    val audioFilePath = data?.getStringExtra(EXTRA_NAME_AUDIO_FILE_METADATA)
+                    audioFilePath?.let {
+                        viewModel.audioFilePaths.add(0, it)
+                        audioFileAdapter.submitAudioFilePaths(viewModel.audioFilePaths)
+                    }
+                }
+            }
         }
     }
 
@@ -67,4 +99,10 @@ class ScriptWritingFragment: BaseFragment() {
 
     )
      */
+
+    companion object {
+        private const val REQUEST_CODE_AUDIO_RECORDER = 1608
+
+        const val EXTRA_NAME_AUDIO_FILE_METADATA = "com.duke.elliot.opicdi.script.script_writing_fragment.extra_name_audio_file_metadata"
+    }
 }

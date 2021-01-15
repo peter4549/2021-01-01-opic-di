@@ -20,4 +20,11 @@
     <string name="audio_player_playback_failure_message">오디오를 재생할 수 없습니다.</string>
     <string name="audio_file_name_input_dialog_title">파일 이름을 입력하세요.</string>
     <string name="microphone_unavailable_message">마이크를 사용할 수 없습니다.</string>
+    <string name="save_confirmation_message_title">녹음 파일 저장</string>
+    <string name="save_confirmation_message_message">녹음 파일을 저장히시겠습니까?</string>
+    <string name="save_confirmation_message_positive_button_text">저장</string>
+    <string name="save_confirmation_message_negative_button_text">저장 안 함</string>
+
+    <!-- Date Format -->
+    <string name="date_format_M_d">M월 d일</string>
 </resources>

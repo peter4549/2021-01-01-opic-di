@@ -26,7 +26,8 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".audio_recoder.AudioRecorderActivity" />
+        <activity android:name=".audio_recoder.AudioRecorderActivity"
+            android:launchMode="singleTask"/>
     </application>
 
 </manifest>

@@ -80,5 +80,5 @@ dependencies {
     implementation 'com.github.piasy:AudioProcessor:1.6.0'
 
     // FFmpeg-Android-JAVA
-    implementation 'com.writingminds:FFmpegAndroid:0.3.2'
+    // implementation 'com.writingminds:FFmpegAndroid:0.3.2'
 }

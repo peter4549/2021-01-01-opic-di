@@ -16,7 +16,7 @@ import java.util.*
 
 
 fun Long.toDateFormat(pattern: String): String = SimpleDateFormat(pattern, Locale.getDefault()).format(
-        this
+    this
 )
 
 fun getCurrentTime() = Calendar.getInstance().timeInMillis
@@ -44,9 +44,10 @@ fun getAudioFileMetadata(audioFilePath: String): AudioFileMetaData {
     val mediaMetadataRetriever = MediaMetadataRetriever()
     mediaMetadataRetriever.setDataSource(audioFilePath)
     return AudioFileMetaData(
-            name = audioFilePath.fileName(),
-            duration = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L,
-            date = audioFile.lastModified()
+        audioFilePath = audioFilePath,
+        name = audioFilePath.fileName(),
+        duration = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L,
+        date = audioFile.lastModified()
     )
 }
 
@@ -59,7 +60,7 @@ fun String.fileName() = this.substring(this.lastIndexOf("/"))
 @RequiresApi(Build.VERSION_CODES.O)
 fun contentUriToPath(context: Context, contentUri: Uri): String? {
     val cursor = context.contentResolver
-            .query(contentUri, null, null, null) ?: return null
+        .query(contentUri, null, null, null) ?: return null
 
     cursor.moveToNext()
     val path = cursor.getString(cursor.getColumnIndex("_data"));

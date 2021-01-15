@@ -78,7 +78,7 @@ class AudioRecorder private constructor() {
                 try {
                     audioRecord.startRecording()
                 } catch (e: IllegalStateException) {
-                    Timber.e(e, "startRecording failed: ${e.message}")
+                    Timber.e(e, "startRecording failed: ${e.message}.")
                     audioDataCallback.onError()
                     return
                 }
@@ -122,10 +122,10 @@ class AudioRecorder private constructor() {
 
         private fun onError(errorCode: Int) {
             if (errorCode == AudioRecord.ERROR_INVALID_OPERATION) {
-                Timber.e("Record failed: ERROR_INVALID_OPERATION")
+                Timber.e("Record failed: ERROR_INVALID_OPERATION.")
                 audioDataCallback.onError()
             } else if (errorCode == AudioRecord.ERROR_BAD_VALUE) {
-                Timber.e("Record failed: ERROR_BAD_VALUE")
+                Timber.e("Record failed: ERROR_BAD_VALUE.")
                 audioDataCallback.onError()
             }
         }

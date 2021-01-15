@@ -17,7 +17,6 @@ open class BaseActivity: AppCompatActivity() {
 
     protected fun setOnHomePressedCallback(onHomePressed: () -> Unit) {
         this.onHomePressed = onHomePressed
-        showToast("HOME INIT")
     }
 
     protected fun setDisplayHomeAsUpEnabled(toolbar: Toolbar) {

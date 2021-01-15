@@ -4,6 +4,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.view.View
 import android.widget.SeekBar
+import androidx.core.view.isVisible
 
 fun View.scale (
     scale: Float = 0.8F,
@@ -28,6 +29,59 @@ fun View.scale (
             override fun onAnimationRepeat(animator: Animator?) {}
         })
         .start()
+}
+
+fun View.scaleDown (
+        scale: Float,
+        duration: Long,
+        animationEndCallback: ((view: View) -> Unit)? = null
+) {
+    alpha = 1F
+    visibility = View.VISIBLE
+
+    this.animate()
+            .scaleX(scale)
+            .scaleY(scale)
+            .alpha(0F)
+            .setDuration(duration)
+            .setListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(animator: Animator?) {  }
+
+                override fun onAnimationEnd(animator: Animator?) {
+                    visibility = View.GONE
+                    animationEndCallback?.invoke(this@scaleDown)
+                }
+
+                override fun onAnimationCancel(animator: Animator?) {  }
+                override fun onAnimationRepeat(animator: Animator?) {  }
+            })
+            .start()
+}
+
+fun View.scaleUp (
+        scale: Float,
+        duration: Long,
+        animationEndCallback: ((view: View) -> Unit)? = null
+) {
+    alpha = 0F
+    visibility = View.VISIBLE
+
+    this.animate()
+            .scaleX(scale)
+            .scaleY(scale)
+            .alpha(1F)
+            .setDuration(duration)
+            .setListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(animator: Animator?) {  }
+
+                override fun onAnimationEnd(animator: Animator?) {
+                    animationEndCallback?.invoke(this@scaleUp)
+                }
+
+                override fun onAnimationCancel(animator: Animator?) {  }
+                override fun onAnimationRepeat(animator: Animator?) {  }
+            })
+            .start()
 }
 
 fun SeekBar.progressRate(): Float {
@@ -73,3 +127,5 @@ fun View.fadeOut(duration: Number, onAnimationEndCallback: (view: View) -> Unit)
                 })
     }
 }
+
+fun View.isNotVisible() = !isVisible
